@@ -3,7 +3,7 @@ This is a model checker for first-order logic. That is, given a model and a theo
 The model is supplied as a list of assertions, with the convention that each and every true assertion is stated and each and every false assertion is not stated. 
 The theory is supplied as a list of axioms. 
 
-The syntax is similar to that of [Prover9][https://www.cs.unm.edu/~mccune/mace4/].
+The syntax is similar to that of [Prover9](https://www.cs.unm.edu/~mccune/mace4/).
 
 The algorithm is a simple brute force approach that evaluates all axioms sequentially. If an axioms is false the algorithm stops and explains why the axioms was evaluated false. 
 
