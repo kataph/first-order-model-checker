@@ -559,6 +559,11 @@ def check_model_against_axioms(model_file: str, axioms_file: str)->None:
 
 
 if __name__ == "__main__":
-    check_model_against_axioms("DOLCE-clay-statue-model.p9", "DOLCE-clay-statue-axioms.p9")
+    import argparse
+    parser = argparse.ArgumentParser(prog='FOL model checker',description='Simply supply the location of a file containing a model and of a file containing a theory')
+    parser.add_argument('model_file', type = str)
+    parser.add_argument('axioms_file', type = str)
+    args = parser.parse_args()
+    check_model_against_axioms(args.model_file, args.axioms_file)
 
     
