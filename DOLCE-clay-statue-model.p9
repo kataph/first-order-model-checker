@@ -1,0 +1,105 @@
+% statements reported in WonderWeb D18 p.74
+ACC(crash) . NAPO(statue) . M(clay) . T(t1) . T(t2) . T(t3) .
+PRE(crash, t123) . PC(statue, crash, t12) . PC(clay, crash, t123) .
+PRE(statue, t12) . PRE(clay, t123) .
+DK(statue, clay, t12) . STINCL(statue, clay) .
+PRE(statue,t12) . PRE(clay,t123) .
+TL(tl) . SL(slc) . SL(sls) . S(s1) . S(s2) .
+qt(tl, crash) . qt(slc, clay) . qt(sls,statue) .
+ql(t123,tl) . ql3(s1,sls,t12) . ql3(s1,slc,t12) . ql3(s2,slc,t3) .
+SUM(t12,t1,t2) .
+SUM(t123,t12,t3) .
+
+% (a possible) model completitions w.r.to reduced DOLCE theory. 
+ED(clay) . ED(statue) .
+PD(crash) .
+T(t12) . T(t123) .
+R(s1) . R(s2) . R(t1) . R(t2) . R(t3) . R(t12) . R(t123) .
+Q(tl) . Q(slc) . Q(sls) .
+
+PRE(statue, t1) .
+PRE(statue, t2) .
+PRE(clay, t1) .
+PRE(clay, t2) .
+PRE(clay, t3) .
+PRE(clay, t12) .
+PRE(crash, t1) .
+PRE(crash, t2) .
+PRE(crash, t3) .
+PRE(crash, t12) .
+PRE(sls, t1) .
+PRE(sls, t2) .
+PRE(slc, t1) .
+PRE(slc, t2) .
+PRE(slc, t3) .
+PRE(tl, t1) .
+PRE(tl, t2) .
+PRE(tl, t3) .
+
+K(statue,clay,t12) .
+K(statue,clay,t1) .
+K(statue,clay,t2) .
+DK(statue,clay,t1) .
+DK(statue,clay,t2) .
+
+ql3(s1,sls,t1) . ql3(s1,slc,t1) .
+ql3(s1,sls,t2) . ql3(s1,slc,t2) .
+SLOC(s1,statue,t1) .
+SLOC(s1,statue,t2) .
+SLOC(s1,statue,t12) .
+SLOC(s1,clay,t1) .
+SLOC(s1,clay,t2) .
+SLOC(s1,clay,t12) .
+SLOC(s2,clay,t3) .
+
+STINCL(statue,statue) .
+%STINCL(clay,clay) .
+
+P(crash,crash) . O(crash,crash) .
+P(s1,s1) . O(s1,s1) .
+P(s2,s2) . O(s2,s2) .
+P(t1,t1) . O(t1,t1) .
+P(t2,t2) . O(t2,t2) .
+P(t3,t3) . O(t3,t3) .
+P(t12,t12) . O(t12,t12) .
+P(t123,t123) . O(t123,t123) .
+
+P(t1,t12) .
+P(t2,t12) .
+P(t1,t123) .
+P(t2,t123) .
+P(t3,t123) .
+P(t12,t123) .
+
+O(t1,t12) . O(t12,t1) .
+O(t2,t12) . O(t12,t2) .
+O(t1,t123) . O(t123,t1) .
+O(t2,t123) . O(t123,t2) .
+O(t3,t123) . O(t123,t3) .
+O(t12,t123) . O(t123,t12) .
+
+SUM(crash,crash,crash) .
+SUM(s1,s1,s1) .
+SUM(s2,s2,s2) .
+SUM(t1,t1,t1) .
+SUM(t2,t2,t2) .
+SUM(t3,t3,t3) .
+SUM(t12,t12,t12) .
+SUM(t123,t123,t123) .
+
+SUM(t12,t1,t2) . SUM(t12,t2,t1) .
+SUM(t12,t12,t1) . SUM(t12,t1,t12) .
+SUM(t12,t12,t2) . SUM(t12,t2,t12) .
+
+SUM(t123,t12,t3) . SUM(t123,t3,t12) .
+SUM(t123,t123,t1) . SUM(t123,t1,t123) .
+SUM(t123,t123,t2) . SUM(t123,t2,t123) .
+SUM(t123,t123,t3) . SUM(t123,t3,t123) .
+SUM(t123,t123,t12) . SUM(t123,t12,t123) .
+
+PC(statue,crash,t1) .
+PC(statue,crash,t2) .
+PC(clay,crash,t1) .
+PC(clay,crash,t2) .
+PC(clay,crash,t3) .
+PC(clay,crash,t12) .

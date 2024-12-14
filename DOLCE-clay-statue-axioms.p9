@@ -1,0 +1,41 @@
+% reduced and modified DOLCE theory from WonderWeb D18
+% taxonomical axioms 
+all X (NAPO(X) | M(X)) -> ED(X) .
+all X ACC(X) -> PD(X) .
+all X (T(X) | S(X)) -> R(X) .
+all X (TL(X) | SL(X)) -> Q(X) .
+
+all X - (ED(X) & PD(X)) | (ED(X) & R(X)) | (ED(X) & Q(X)) | (PD(X) & R(X)) | (PD(X) & Q(X)) | (Q(X) & R(X)) . 
+
+% participation and presence
+all X all Y all T PC(X,Y,T) -> ED(X) & PD(Y) & T(T). 
+all X all T PRE(X,T) -> -R(X) & T(T). 
+all X all T (ED(X) & PRE(X,T)) -> exists Y PC(X,Y,T) .
+all X all Y all T all U (P(U,T) & PC(X,Y,T)) -> PC(X,Y,U) .
+all X all T all U (P(U,T) & PRE(X,T)) -> PRE(X,U) .
+all X ED(X) -> exists Y exists T PC(X,Y,T).
+all Y PD(Y) -> exists X exists T PC(X,Y,T).
+
+% constitution
+all X all Y all T K(X,Y,T) -> (ED(X)&ED(Y) | PD(X)&PD(Y)) & T(T) . 
+all X all Y all T DK(X,Y,T) <-> K(X,Y,T) & - exists Z (K(X,Z,T) & K(Z,Y,T)) .
+
+% non-temporal mereology
+(all X all Y all Z SUM(Z,X,Y) <-> ((R(Z) & R(X) & R(Y) | PD(Z) & PD(X) & PD(Y)) & (all W O(W,Z) <-> (O(W,X) | O(W,Y))))) .
+(all X all Y O(X,Y) <-> exists Z (P(Z, X) & P(Z, Y))) .
+all X all Y R(X) | PD (X) -> P(X,X) .
+all X all Y P(X,Y) & P(Y,X) -> X = Y .
+all X all Y all Z P(X,Y) & P(Y,Z) -> P(X,Z) .
+
+% qualities
+all Q Q(Q) -> exists X qt(Q,X) .
+all V all Q all T ql3(V,Q,T) & S(V) -> SL(Q) .
+all V all Q all T ql3(V,Q,T) & T(V) -> TL(Q) .
+all V all Q all T ql3(V,Q,T) -> R(V) & Q(Q) & T(T) .
+all V all Q ql(V,Q) -> R(V) & Q(Q) . 
+all X all Q qt(Q,X) -> Q(Q) & -Q(X) .
+
+% spatio-temporal inclusion
+all S all X all T SLOC(S,X,T) -> S(S) & (ED(X) | PD(X)) & T(T) . 
+all S all X all T SLOC(S,X,T) -> exists Q SL(Q) & qt(Q,X) & ql3(S,Q,T) .
+all X all Y STINCL(X,Y) <-> (exists T PRE(X,T)) & (all U PRE(X,U) -> exists SX exists SY (SLOC(SX,X,U) & SLOC(SY,Y,U) & P(SX,SY))) .
