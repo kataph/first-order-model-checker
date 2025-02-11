@@ -8,7 +8,7 @@ The syntax is similar to that of [Prover9](https://www.cs.unm.edu/~mccune/mace4/
 The algorithm is a simple brute force approach that evaluates all axioms sequentially. If an axioms is false the algorithm stops and explains why the axioms was evaluated false. 
 
 Simply run check.py supplying the path to a file containing a model and the path to a file containing a theory (e.g. `>python check.py DOLCE-clay-statue-model.p9 DOLCE-clay-statue-axioms.p9`).
-Some tests are present in `tests.py`. They can be run by executing that file. The `DOLCE-clay-statue` model and axioms files are an example of model and theory files, as well as an additional tests.
+Some tests are present in `tests.py`. They can be run by executing that file. The `DOLCE-clay-statue` model and axioms files are an example of model and theory files, as well as an additional tests. 
 
 Note that the complexity of the algorithm is O(c^a) where c is the number of constants in the model, and a is the maximum nesting-depth of quantifiers.   
 

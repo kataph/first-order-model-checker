@@ -1,77 +1,14 @@
 import sys
-import re 
+import re
+import time
+from typing import Literal 
 from tqdm import tqdm
 from lark import Lark, Tree, Token, Transformer
 from lark.visitors import Visitor, Interpreter
 
-prover9_parser = Lark(r"""
+from check_modulo_signature_equivalence import find_equivalent, intersects_equivalence_classes
 
-start: lines
-
-lines: line+
-
-line: (sentence | atomicsentence) label? "."
-
-?label: "#" "label(" LABEL_TEXT ")"
-                      
-?sentence: "exists" VARIABLE entailterm -> existential_quantification
-          | "all" VARIABLE entailterm -> universal_quantification
-          | "exists" VARIABLE sentence -> existential_quantification
-          | "all" VARIABLE sentence -> universal_quantification
-
-?entailterm: addendum
-        | entailterm "->" addendum -> entailment
-        | entailterm "<-" addendum -> reverse_entailment
-        | entailterm "<->" addendum -> equivalence_entailment
-        | entailterm "->" sentence -> entailment_exc
-        | entailterm "<-" sentence -> reverse_entailment_exc
-        | entailterm "<->" sentence -> equivalence_entailment_exc
-
-?addendum: factor
-        | addendum "|" factor -> disjunction
-        | addendum "|" sentence -> disjunction_exc
-
-?factor: literalatom
-        | factor "&" literalatom -> conjunction
-        | factor "&" sentence -> conjunction_exc
-
-?literalatom: atomicsentence
-            | "-" literalatom -> negation
-            | "-" sentence -> negation_exc
-
-?atomicsentence: predicate
-                | equality_atom
-                | predicate0
-                | "(" sentence ")"
-                | "(" entailterm ")"
-
-?equality_atom: term "=" term
-                | term "=" "(" term ")" // there is this horrendous possibility also
-                | "(" term ")" "=" term 
-                | "(" term ")" "=" "(" term ")"
-                //| term "!=" term // not gonna bother with this symbol
-                      
-?term: CONSTANT // there are no functions
-    | VARIABLE
-
-atomicstatement: PREDICATE_SYMBOL "(" _constant_list ")"
-
-predicate0 : "True" -> true
-           | "False" -> false
-predicate: PREDICATE_SYMBOL "(" _term_list ")"
-PREDICATE_SYMBOL:  /[a-zA-Z][a-zA-Z0-9]*_?\d*/
-_term_list: (term ",")* term
-_constant_list: (CONSTANT ",")* CONSTANT
-CONSTANT: /[a-z]+_?\d*/ 
-VARIABLE: /[A-Z]+_?\d*/  // uppercase style
-LABEL_TEXT: /[a-zA-Z0-9_-]+/
-
-%import common.ESCAPED_STRING
-%import common.SIGNED_NUMBER
-%import common.WS
-%ignore WS
-
-""")
+from model import prover9_parser, Signature, Model, P9ModelReader
 
 text = '(all X (cat(X) <-> (ed(X) & (exists T1 (pre(X,T1))) & all T (pre(X,T) -> tat(X,T)))))'
 text = '(A(c) & B(y))'
@@ -89,92 +26,6 @@ text = 'all X A(X,Y) & exists Z P(Z) .'
 text = 'all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l).'
 text = 'all X A(X,Y,c2) | - exists Z P(X,Z,c) .'
 
-
-
-
-class Signature:
-    def __init__(self):
-        self.predicates = {}
-        self.constants = []
-    def __str__(self):
-        return f"""
-                constants: {self.constants}
-                predicates: {self.predicates}
-                """
-    def add_predicate(self, predicate_symbol: str | Token, arity: int):
-        if isinstance(predicate_symbol, Token):
-            predicate_symbol = predicate_symbol.value 
-        if predicate_symbol in self.predicates: 
-            if (arity0:=self.predicates[predicate_symbol]) != arity:
-                raise TypeError(f"The symbol {predicate_symbol} is used with different arities: {arity0} and {arity}")
-        else: 
-            self.predicates.update({predicate_symbol:arity})
-    def add_constant(self, constant_symbol: str | Token):
-        if isinstance(constant_symbol, Token):
-            constant_symbol = constant_symbol.value
-        if constant_symbol not in self.constants: 
-            self.constants.append(constant_symbol)
-
-class Model:
-    """Only true facts are recorded"""
-    def __init__(self):
-        self.truth_table = {}
-        self.model_text = ""
-        self.signature = Signature()
-    def __str__(self):
-        if self.model_text == "":
-            return f"""
-                    truth_table: {self.truth_table}
-                    """
-        else: 
-            return "\nMODEL>>>\t"+model_text
-    def add_predicate_value(self, predicate_symbol: str, arguments: tuple[str | Token]):
-        arguments = tuple(str(argument) for argument in arguments)
-        if (predicate_symbol,arguments) not in self.truth_table: 
-            self.truth_table[(predicate_symbol,arguments)] = True
-
-            
-class P9ModelReader(Visitor):
-    """Visits tree and add constants and predicates to self.model.signature; and adds true atomics statements to model"""
-    
-    def __init__(self):
-        super().__init__()
-        self.model = Model()
-
-    def read_model(self, tree: Tree) -> Model:
-        self.visit(tree)
-        out_model = self.model
-        self.model = Model()
-        return out_model
-
-    def predicate(self, tree):
-        predicate_symbol, *term_list = tree.children
-        predicate_symbol = predicate_symbol.value
-        for token in term_list:
-            if not isinstance(token, Token): raise AssertionError(f"There should only be tokens in predicates terms. Instead found {token} in {tree} in predicate {predicate_symbol}, which is not a Token")
-            if (token.type == "VARIABLE"): raise AssertionError(f"There should not be variables in assertions when reading the model, only constants. Instead, I found the variable {token} in the predicate {predicate_symbol}")
-            assert token.type == "CONSTANT"
-            self.model.signature.add_constant(token)
-        self.model.signature.add_predicate(predicate_symbol, arity:=len(term_list))
-        self.model.add_predicate_value(predicate_symbol, tuple(term_list))
-
-    def equality_atom(self, tree):
-        left_member, right_member = tree.children
-        variables_set = set()
-        if not isinstance(left_member, Token) or not isinstance(right_member, Token):
-            raise AssertionError(f"Non-token object in equality atom. This should not happen. It was one of these: {left_member.children[0], right_member.children[0]} in the equality {self}")
-        if left_member.type == "VARIABLE" or right_member.type == "VARIABLE":
-            raise AssertionError(f"There should not be variables in assertions when reading the model, only constants. Instead, I found a variable within {left_member, right_member} in the equality {self}")
-        if left_member.type != "CONSTANT" or right_member.type != "CONSTANT":
-            raise AssertionError(f"There should be constants within equalities when reading the model, only constants. Instead, I found these things {left_member, right_member} in the equality {self}")
-        self.model.signature.add_constant(left_member)
-        self.model.signature.add_constant(right_member)
-        self.model.signature.add_predicate("=", 2)
-        self.model.add_predicate_value("=", (left_member, right_member))
-        return variables_set
-    
-    true = lambda self, _: True
-    false = lambda self, _: False
 
 class P9Explainer(Visitor):
     """Visits tree and reads explanations of evaluation"""
@@ -288,40 +139,47 @@ class P9FreeVariablesExtractor(Transformer):
 
     label = lambda self, items: None
 
-# out=P9FreeVariablesExtractor().transform(prover9_parser.parse("(all X0 all X1 (ach(X0) & temporallyLocatedAt(X0,X1) -> at(X1))) # label(achievemants_atomic_Ad75)."))
-# print(out)
-# s()
-
-# global_counter = 0
-# def merge_subs(*args, global_counter = global_counter):
-#     collected = {}
-
-#     for arg in args:
-#         for key in arg.keys() & collected.keys():
-#             if arg[key] != collected[key]:
-#                 value = collected[key]
-#                 global_counter += 1
-#                 arg.update({key + "dis" + str(global_counter): value}) 
-#         collected.update(arg)
-#     return collected
-# # print(merge_subs({"X":"a"}, {"Y":"b"}, {"X":"z"}, {"X":"u", "V":"v"}))
-# print(merge_subs([{"X":"a"}]))
-# s()
-# print(merge_subs({"X":"a"}, [{"Y":"b"}]))
-# print(merge_subs([{"X":"a"}], [{"Y":"b"}]))
-
-# s()
-
-
 class P9Evaluator(Interpreter):
     """Evaluates a sentence give a model. 
     E.g. all X A(X) is True given the model with one constant c and the statement A(c)"""
     
-    def __init__(self, model: Model = Model()):#, to_explain: bool = True):
+    def __init__(self, model: Model = Model(), options: list[str] = []):#, to_explain: bool = True):
         super().__init__()
         self.model = model
         self.is_a_tqdm_running = False
+        self.options = options
+        self.quantification_type_to_inner_truth_value = {"universal":False, "existential":True}
+        if "equivalence" in options:
+            self.p9extractor = P9FreeVariablesExtractor()
+            self.equivalences = {frozenset({"="}):[set(model.signature.constants)]} # Equality is added since the way the models are written every costant is '='-equivalent
+            for predicate in self.model.signature.predicates: 
+                self.equivalences.update({frozenset({predicate}): find_equivalent(self.model.ordered_truth_table[predicate], self.model)})
         # self.to_explain = to_explain
+
+    def get_equivalent_representatives(self, tree, substitutions: dict[str,str]):
+        free_variables, axiom_signature = self.p9extractor.extract_free_variables_and_signature(tree)
+        predicates_in_scope = axiom_signature.predicates.keys()
+        predicates_fset = frozenset(predicates_in_scope)
+        # note that in both cases the (deep!) copy is necessary otherwise the original data will be modified by the subsequent operations leading to wrong behavior
+        if not predicates_fset in self.equivalences:
+            classes = intersects_equivalence_classes([[clazz.copy() for clazz in self.equivalences[frozenset({key})]] for key in predicates_in_scope], self.model)
+            self.equivalences[predicates_fset] = classes
+        else:
+            classes = [clazz.copy() for clazz in self.equivalences[predicates_fset]] 
+        # now, if there are constants in the axiom coming either by the original axiom or by some subsequent substution, they must be removed from non-singleton equivalence classes and added to singletons
+        set_constants = set(axiom_signature.constants).union(set(substitutions.values()))
+        for clazz in classes:
+            if (intersection:=clazz.intersection(set_constants)): 
+                for element in intersection:
+                    clazz.remove(element)
+        classes = [x for x in classes if x!=set()] # some classes could be empty now
+        for constant in set_constants:
+            classes.append({constant})
+        representatives = [] 
+        for clazz in classes:
+            if len(clazz) > 0:
+                representatives.append(list(clazz)[0])
+        return representatives
 
     def evaluate(self, tree: Tree):
         return self.visit(tree)
@@ -359,54 +217,45 @@ class P9Evaluator(Interpreter):
     lines = pass_by
     line = pass_empty_substitutions_and_set_flag
 
-    def universal_quantification(self, tree: Tree):
+    def quantification(self, tree: Tree, quantification_type: Literal["universal", "existential"]) -> bool:
         quantified_variable, quantified_formula = tree.children
         substitutions = tree.additional_data.copy()
-        successful_substitutionss: list[dict[str,str]] = []
         if quantified_variable.value in substitutions: raise AssertionError(f"Found same variable symbol doubly quantified! It should not happen. Variable is {quantified_variable} for {quantified_formula}")
+        
+        # this part takes care of the execution of eventual strategies
+        constants_to_check = self.model.signature.constants
+        if "equivalence" in self.options:
+            constants_to_check = self.get_equivalent_representatives(tree, substitutions)
+            
+
+        # this part decides if a loading bar should be activated 
         if not self.is_a_tqdm_running:
-            iterator=tqdm(self.model.signature.constants, "Loading bar for the first quantifier...")
+            iterator=tqdm(constants_to_check, "Loading bar for the first quantifier...")
             self.is_a_tqdm_running = True
         else:
-            iterator = self.model.signature.constants
+            iterator = constants_to_check
+        
+        attempted_subsss: list[dict[str,str]] = []
         for constant in iterator:
             substitutions.update({quantified_variable.value: constant}) 
             truth_value = self.visit_with_memory(quantified_formula, substitutions)
-            if truth_value == False: 
+            if truth_value == self.quantification_type_to_inner_truth_value[quantification_type]: 
                 tree.explanation = f"{truth_value} with {substitutions}"
                 if isinstance(iterator,tqdm): iterator.clear()
-                return False
-            successful_substitutionss.append(substitutions.copy())
-        tree.explanation = f"{truth_value} with {successful_substitutionss}"
+                return self.quantification_type_to_inner_truth_value[quantification_type]
+            attempted_subsss.append(substitutions.copy())
+        tree.explanation = f"{truth_value} with {attempted_subsss}"
         if isinstance(iterator,tqdm): iterator.clear()
-        return True
+        return not self.quantification_type_to_inner_truth_value[quantification_type]
     
+    def universal_quantification(self, tree: Tree):
+        return self.quantification(tree, "universal")
     def existential_quantification(self, tree: Tree):
-        quantified_variable, quantified_formula = tree.children
-        substitutions = tree.additional_data.copy()
-        if quantified_variable.value in substitutions: raise AssertionError(f"Found same variable symbol doubly quantified! It should not happen. Variable is {quantified_variable} for {quantified_formula} and substitution is {substitutions}")
-        failed_subss: list[dict[str,str]] = []
-        if not self.is_a_tqdm_running:
-            iterator=tqdm(self.model.signature.constants, "Loading bar for the first quantifier...")
-            self.is_a_tqdm_running = True
-        else:
-            iterator = self.model.signature.constants
-        for constant in iterator:
-            substitutions.update({quantified_variable.value: constant}) 
-            truth_value = self.visit_with_memory(quantified_formula, substitutions)
-            if truth_value == True: 
-                tree.explanation = f"{truth_value} with {substitutions}"
-                if isinstance(iterator,tqdm): iterator.clear()
-                return True
-            failed_subss.append(substitutions.copy())
-        tree.explanation = f"{truth_value} with {failed_subss}"
-        if isinstance(iterator,tqdm): iterator.clear()
-        return False
+        return self.quantification(tree, "existential")
 
 
     def entails(self, tree: Tree): 
         body, head = tree.children
-        #print("in entails with body", body.pretty(), tree.additional_data)
         truth_value = ((not self.visit_with_memory(body, tree.additional_data)) or (self.visit_with_memory(head, tree.additional_data)))
         tree.explanation = f"{truth_value} with {tree.additional_data}"
         return truth_value#, merge_subs(head_subs, body_subs)
@@ -472,11 +321,10 @@ class P9Evaluator(Interpreter):
         tree.explanation = f"{truth_value} with {tree.additional_data}"
         return truth_value
 
-
 def loop_on_file(file_path: str, action) -> None:
     lines = open(file_path, "rt").readlines()
     for line in lines:
-        no_comment_line = re.sub("%.*\n", "", line)
+        no_comment_line = re.sub("%.*", "", line)
         no_comment_line = no_comment_line.replace("\n","")
         if no_comment_line in ["", "\n"] :
             continue
@@ -487,7 +335,7 @@ def read_model_file(model_file: str) -> Model:
     """Read file as a whole and returns corresponding model"""
     model_text = open(model_file, "rt").read()
     print("reading model file as a whole...")
-    no_comment_model_text = re.sub("%.*\n", "\n", model_text)
+    no_comment_model_text = re.sub("%.*", "\n", model_text)
     
     p9reader = P9ModelReader()
     modelAST: Tree = prover9_parser.parse(no_comment_model_text)       
@@ -500,32 +348,30 @@ def read_model_file(model_file: str) -> Model:
 
 # model = read_model_file("model.p9")
 
-def check_axioms_file(axioms_file: str, model: Model, multiprocessing_required = False, processes_number = 4):
+def check_axioms_file(axioms_file: str, model: Model, options: list[str], multiprocessing_required = False, processes_number = 4):
     """Read file line by line as a whole and checks axioms one-by-one against given model"""
     
     lines = open(axioms_file, "rt").readlines()
     
     if not multiprocessing_required:
-        check_lines(lines, model)
+        check_lines(lines, model, options)
     else: 
         if processes_number < 1: raise TypeError(f"Asked for multiprocessing with non-positive process number")
         subliness = [lines[i::processes_number] for i in range(processes_number)]
         for sublines in subliness:
             process = ...
-            process.execute(check_lines, sublines, model)
-    
+            process.execute(check_lines, sublines, model, options)
 
-
-def check_lines(lines: list[str], model: Model):    
+def check_lines(lines: list[str], model: Model, options: list[str]):    
     p9variables = P9FreeVariablesExtractor()
-    p9evaluator = P9Evaluator(model)
+    p9evaluator = P9Evaluator(model, options)
     p9explainer = P9Explainer()
     
     axioms_true = 0
     axioms_false = 0
     # for line in tqdm(lines):
     for line in lines:
-        no_comment_line = re.sub("%.*\n", "", line)
+        no_comment_line = re.sub("%.*", "", line) # the regex "%.*\n" is wrong because it will not match the last line of a file
         no_comment_line = no_comment_line.replace("\n","")
         if no_comment_line in ["", "\n"] :
             continue
@@ -552,18 +398,75 @@ def check_lines(lines: list[str], model: Model):
     if axioms_false > 0:
         print(f"Some axioms were evaluated as false. Check printed output for information on which they were and why they were evaluated as false.")
 
-def check_model_against_axioms(model_file: str, axioms_file: str)->None:
+def check_model_against_axioms(model_file: str, axioms_file: str, options: list[str])->None:
+    start1 = time.time()
     model = read_model_file(model_file)
-    check_axioms_file(axioms_file, model)
+    stop1 = time.time()
+    
+    start2 = time.time()
+    check_axioms_file(axioms_file, model, options)
+    stop2 = time.time()
+    print(f"To read model {stop1-start1} seconds were required")
+    print(f"To check axioms {stop2-start2} seconds were required")
 
 
+class P9SignatureExtractor(Transformer):
+    """Extract the signature from a formula. E.g. all X A(X,Y,c2) | - exists Z P(X,Z,c) .  ---> {A, P}"""
+
+    def equality_atom(self, items):
+        return {"="}
+    
+    def predicate(self, items):
+        predicate_symbol, *term_list = items
+        predicate_symbol = predicate_symbol.value
+        arity = len(term_list)
+        return {predicate_symbol}
+
+    def existential_quantification(self, items):
+        quantified_variable, signature_from_inner_formula = items
+        return signature_from_inner_formula
+    universal_quantification = existential_quantification
+    
+    merge_signatures = lambda self, items: set().union(*(var_set for var_set in items))
+    
+    conjunction = merge_signatures
+    disjunction = merge_signatures
+    conjunction_exc = merge_signatures
+    disjunction_exc = merge_signatures
+    entailment = merge_signatures
+    reverse_entailment = merge_signatures
+    equivalence_entailment = merge_signatures
+    entailment_exc = merge_signatures
+    reverse_entailment_exc = merge_signatures
+    equivalence_entailment_exc = merge_signatures
+    negation = merge_signatures
+    negation_exc = merge_signatures
+
+    do_nothing = lambda self, items: items
+    car = lambda self, items: items[0]
+    start = car
+    lines = car
+    line = car
+    sentence = car
+
+    label = lambda self, items: None
+
+def test_signature_extraction():
+    p9sig = P9SignatureExtractor()
+    assert p9sig.transform(prover9_parser.parse("all X exists Y P(X,Y) & X=Y .")) == {'=', 'P'}; print("""p9sig.transform(prover9_parser.parse("all X exists Y P(X,Y) & X=Y .")) == {'=', 'P'}""")
+    assert p9sig.transform(prover9_parser.parse("((all X exists Y P(X,Y) & X=Y) | (exists X exists Z all U all V (E(X,y,Z) & R(U,V)))) .")) == {'=', 'P', 'E', 'R'}; print("""p9sig.transform(prover9_parser.parse("((all X exists Y P(X,Y) & X=Y) | (exists X exists Z all U all V (E(X,y,Z) & R(U,V)))) .")) == {'=', 'P', 'E', 'R'}""")
+    assert p9sig.transform(prover9_parser.parse("all X all Y P(X) & Q(Y) .")) == {'P', 'Q'}; print("""p9sig.transform(prover9_parser.parse("all X all Y P(X) & Q(Y) .")) == {'P', 'Q'}""")
+
+# test_signature_extraction()
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(prog='FOL model checker',description='Simply supply the location of a file containing a model and of a file containing a theory')
-    parser.add_argument('model_file', type = str)
-    parser.add_argument('axioms_file', type = str)
+    parser.add_argument('-m', '--model_file', type = str, help="Model file location")
+    parser.add_argument('-a', '--axioms_file', type = str, help="Axiom file location")
+    parser.add_argument('-o', '--options', type = str, nargs = "+", default = [], help="Options. Currently only 'equivalence' is supported")
     args = parser.parse_args()
-    check_model_against_axioms(args.model_file, args.axioms_file)
+    print(args)
+    check_model_against_axioms(args.model_file, args.axioms_file, args.options)
 
     
