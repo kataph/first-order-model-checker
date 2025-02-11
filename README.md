@@ -21,5 +21,5 @@ Note that the complexity of the algorithm is O(c^a) where c is the number of con
 - The syntax is similar to prover9. However, *functions are not implemented* (except for constant symbols). Additionally, the `!=` operator is not implemented, and the default prover9 operator priority has been hardcoded in the grammar and cannot be changed. 
 - Note that the model is specified following a closed-world-style convention. 
 - Equality is not implemented in the model specification: it is assumed that differently named constants are different; and that all the constant that exist in the model are exactly those mentioned in some assertion.  
-- The algorithm is not "smart": e.g. `all X0 all X1 all X2 ... all X100 phi | - phi` is a tautology but will not be evaluated. Additionally, defined predicates are
+- The algorithm is not "smart": e.g. `all X0 all X1 all X2 ... all X100 phi | - phi` is a tautology but will not be evaluated.
 - Explanation works by visiting an axiom parsing tree and specifying for each node its truth value for the relevant variables substitutions. 
