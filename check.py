@@ -10,21 +10,23 @@ from check_modulo_signature_equivalence import find_equivalent, intersects_equiv
 
 from model import prover9_parser, Signature, Model, P9ModelReader
 
-text = '(all X (cat(X) <-> (ed(X) & (exists T1 (pre(X,T1))) & all T (pre(X,T) -> tat(X,T)))))'
-text = '(A(c) & B(y))'
-text = '(P(c1,c2) & Q(x) & T(v)) .'
-text = '''(P(c1,c2) & Q(x) & T(v)) .
-            Q(c)    . '''
-text = '''(P(c1,c2) & Q(x) & T(v)) .
-            True    . 
-            (P(c, c4) & True)    . 
-            False    . '''
-text = 'all X A(X,Y) .'
-text = 'all X A(X,Y,c2) .'
-text = 'all X A(X,Y,c2) & P(X,Z,c) .'
-text = 'all X A(X,Y) & exists Z P(Z) .'
-text = 'all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l).'
-text = 'all X A(X,Y,c2) | - exists Z P(X,Z,c) .'
+POSSIBLE_OPTIONS = {"equivalence"}
+
+# text = '(all X (cat(X) <-> (ed(X) & (exists T1 (pre(X,T1))) & all T (pre(X,T) -> tat(X,T)))))'
+# text = '(A(c) & B(y))'
+# text = '(P(c1,c2) & Q(x) & T(v)) .'
+# text = '''(P(c1,c2) & Q(x) & T(v)) .
+#             Q(c)    . '''
+# text = '''(P(c1,c2) & Q(x) & T(v)) .
+#             True    . 
+#             (P(c, c4) & True)    . 
+#             False    . '''
+# text = 'all X A(X,Y) .'
+# text = 'all X A(X,Y,c2) .'
+# text = 'all X A(X,Y,c2) & P(X,Z,c) .'
+# text = 'all X A(X,Y) & exists Z P(Z) .'
+# text = 'all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l).'
+# text = 'all X A(X,Y,c2) | - exists Z P(X,Z,c) .'
 
 
 class P9Explainer(Visitor):
@@ -149,6 +151,7 @@ class P9Evaluator(Interpreter):
         self.is_a_tqdm_running = False
         self.options = options
         self.quantification_type_to_inner_truth_value = {"universal":False, "existential":True}
+        if not set(options) <= POSSIBLE_OPTIONS: raise AssertionError(f"Called with options={options}, but options can only be {POSSIBLE_OPTIONS}")
         if "equivalence" in options:
             self.p9extractor = P9FreeVariablesExtractor()
             self.equivalences = {frozenset({"="}):[set(model.signature.constants)]} # Equality is added since the way the models are written every costant is '='-equivalent
@@ -160,9 +163,13 @@ class P9Evaluator(Interpreter):
         free_variables, axiom_signature = self.p9extractor.extract_free_variables_and_signature(tree)
         predicates_in_scope = axiom_signature.predicates.keys()
         predicates_fset = frozenset(predicates_in_scope)
+        for pred in predicates_in_scope:
+            if not frozenset({pred}) in self.equivalences:
+                print(f"The predicate {pred} was found in an axiom but not in the model. I *assume* that this is intended to mean that all {pred}-assertions are false and, thus, in the equivalence strategy only a {pred}-equivalence-class exists. I am gonna add it now.")
+                self.equivalences[frozenset(pred)] = [set(self.model.signature.constants)]
         # note that in both cases the (deep!) copy is necessary otherwise the original data will be modified by the subsequent operations leading to wrong behavior
         if not predicates_fset in self.equivalences:
-            classes = intersects_equivalence_classes([[clazz.copy() for clazz in self.equivalences[frozenset({key})]] for key in predicates_in_scope], self.model)
+            classes = intersects_equivalence_classes([[clazz.copy() for clazz in self.equivalences[frozenset({pred})]] for pred in predicates_in_scope], self.model)
             self.equivalences[predicates_fset] = classes
         else:
             classes = [clazz.copy() for clazz in self.equivalences[predicates_fset]] 
@@ -378,9 +385,18 @@ def check_lines(lines: list[str], model: Model, options: list[str]):
         axiom_text = no_comment_line
         axiomsAST: Tree = prover9_parser.parse(axiom_text)
         free_variables, axiom_signature = p9variables.extract_free_variables_and_signature(axiomsAST)
+        if "=" in model.signature.predicates:
+            raise TypeError(f"Equality was found in the model. It should not be there, and instead all constants should be assumed to be different")
         if len(free_variables) > 0:
-            raise TypeError(f"An axiom was found with a free, unquantified, variable. The axiom is {axiom_text}.. The free variables are {free_variables} and the parsed tree is {axiomsAST.pretty()}")
-    
+            raise TypeError(f"An axiom was found with a free, unquantified, variable. The axiom is {axiom_text}. The free variables are {free_variables} and the parsed tree is {axiomsAST.pretty()}")
+        if (not set(axiom_signature.constants) <= set(model.signature.constants)):
+            raise TypeError(f"An axiom was found with a constant that does not appear in the model!")
+        if (not set(axiom_signature.predicates) <= set(model.signature.predicates)):
+            print(f"Warning: An axiom was found with a predicate that does not appear in the model! axioms_signature.predicates = {axiom_signature.predicates} and model.signature.predicates={model.signature.predicates}. This may or may not be correct (if it is a matter of the equality it is correct).")
+        for predicate, arity in axiom_signature.predicates.items():
+            if predicate in model.signature.predicates and model.signature.predicates[predicate] != arity:
+                raise TypeError(f"An axiom was found with the predicate {predicate} of arity {arity}, but in the model the same predicate has arity {model.signature.predicates[predicate]}!")
+
 
         print(f"evaluating >>>{axiom_text}<<< against given model...")
         evaluation = p9evaluator.evaluate(axiomsAST)

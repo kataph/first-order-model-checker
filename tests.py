@@ -1,7 +1,7 @@
 from check import P9FreeVariablesExtractor, P9Evaluator, P9Explainer, P9ModelReader, prover9_parser
 from lark import Tree
 
-def tests():
+def tests(options):
         print("Doing some tests...")
 
         # model_texts_axioms_evals = []
@@ -20,11 +20,11 @@ def tests():
         # model_texts_axioms_evals.append((model_text, axiom_text, [True]))
 
         model_texts_axioms_evals = [
-            ("A(x).A(y).A(z).A(v).",
+            ("A(x,y).A(z,y).",
             "all X exists Y A(X,Y) & B(Y).",
             [False]),
             
-            ("""A(x).A(y).A(z).A(zz).A(v).B(v).""",
+            ("""A(x,y).A(z,z).A(zz,zz).B(zz).""",
             "all X exists Y A(X,Y) & B(Y).",
             [False]),
 
@@ -90,7 +90,6 @@ def tests():
 
         p9variables = P9FreeVariablesExtractor()
         p9model = P9ModelReader()
-        p9evaluator = P9Evaluator()
         p9explainer = P9Explainer()
 
         for model_text, axiom_text, ground_eval in model_texts_axioms_evals:
@@ -102,7 +101,8 @@ def tests():
             free_vars, axioms_signature = p9variables.extract_free_variables_and_signature(axiomAST)
             
             model = p9model.read_model(modelAST)
-            p9evaluator.model = model
+            p9evaluator = P9Evaluator(model = model, options = options)
+            # p9evaluator.model = model
             
 
             print("after-model-visit-model---->", model)
@@ -110,8 +110,17 @@ def tests():
 
             if "=" in model.signature.predicates:
                 raise TypeError(f"Equality was found in the model. It should not be there, and instead all constants should be assumed to be different")
-
-            print("axioms has free variables?---->", free_vars)
+            if len(free_vars) > 0:
+                raise TypeError(f"An axiom was found with a free, unquantified, variable. The axiom is {axiom_text}. The free variables are {free_vars} and the parsed tree is {axiomAST.pretty()}")
+            if (not set(axioms_signature.constants) <= set(model.signature.constants)):
+                raise TypeError(f"An axiom was found with a constant that does not appear in the model!")
+            if (not set(axioms_signature.predicates) <= set(model.signature.predicates)):
+                print(f"Warning: An axiom was found with a predicate that does not appear in the model! axioms_signature.predicates = {axioms_signature.predicates} and model.signature.predicates={model.signature.predicates}. This may or may not be correct.")
+            for predicate, arity in axioms_signature.predicates.items():
+                if predicate in model.signature.predicates and model.signature.predicates[predicate] != arity:
+                    raise TypeError(f"An axiom was found with the predicate {predicate} of arity {arity}, but in the model the same predicate has arity {model.signature.predicates[predicate]}!")
+                
+            print("Free variables from axioms---->", free_vars)
             print("after-variables-extraction-axioms-signature---->", axioms_signature)
 
             evaluation = p9evaluator.evaluate(axiomAST)
@@ -131,4 +140,5 @@ def tests():
         # print(model)
 
 if __name__ == "__main__":
-    tests()
+    # tests(options=[])
+    tests(options=["equivalence"])
