@@ -59,9 +59,9 @@ predicate: PREDICATE_SYMBOL "(" _term_list ")"
 PREDICATE_SYMBOL:  /[a-zA-Z][a-zA-Z0-9]*_?\d*/
 _term_list: (term ",")* term
 _constant_list: (CONSTANT ",")* CONSTANT
-CONSTANT: /[a-z]+_?\d*/ 
+CONSTANT: /[a-z0-9]+_?[0-9a-zA-Z]*/ 
 VARIABLE: /[A-Z]+_?\d*/  // uppercase style
-LABEL_TEXT: /[a-zA-Z0-9_-]+/
+LABEL_TEXT: /"?[a-zA-Z0-9_\-\>\<\\.]+"?/ 
 
 %import common.ESCAPED_STRING
 %import common.SIGNED_NUMBER
@@ -125,7 +125,7 @@ class Model:
                     truth_table: {self.truth_table}
                     """
         else: 
-            return "\nMODEL>>>\t"+model_text
+            return "\nMODEL>>>\t"+self.model_text
     def add_predicate_value(self, predicate_symbol: str, arguments: tuple[str | Token]):
         arguments = tuple(str(argument) for argument in arguments)
         if (predicate_symbol,arguments) not in self.truth_table: 

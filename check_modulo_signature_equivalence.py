@@ -98,8 +98,6 @@ def intersects_equivalence_classes(equivalence_relations: list[list[set[Any]]], 
         new_intersection_relation = []
         for equivalence_class_1 in intersection_relation:
             for equivalence_class_2 in equivalence_relation:
-                # print("------------------------------------------->",equivalence_relations)
-                # print("------------------------------------------->",equivalence_class_1, equivalence_class_2)
                 if len(intersection:=equivalence_class_1.intersection(equivalence_class_2)) > 0:
                     new_intersection_relation.append(intersection)
         intersection_relation = new_intersection_relation
@@ -120,5 +118,4 @@ if __name__ == "__main__":
     # test_swap()
     # test_find_equivalent()
     # test_intersects_equivalence_classes()
-    # s()
     pass

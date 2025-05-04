@@ -1,70 +1,108 @@
-import re
-import time
+import copy
+
+from functools import partialmethod
 from typing import Literal 
 from tqdm import tqdm
 from lark import Lark, Tree, Token, Transformer
 from lark.visitors import Visitor, Interpreter
 
-from basic_formulas_manipulation import treeExplainer, P9FreeVariablesExtractor
+from basic_formulas_manipulation import treeExplainer, P9FreeVariablesExtractor, ToPrenexCNF, ToString 
 from check_modulo_signature_equivalence import find_equivalent, intersects_equivalence_classes
+from check import P9Explainer
 
 from model import prover9_parser, Signature, Model, P9ModelReader
 
-POSSIBLE_OPTIONS = {"equivalence"}
 
-# text = '(all X (cat(X) <-> (ed(X) & (exists T1 (pre(X,T1))) & all T (pre(X,T) -> tat(X,T)))))'
-# text = '(A(c) & B(y))'
-# text = '(P(c1,c2) & Q(x) & T(v)) .'
-# text = '''(P(c1,c2) & Q(x) & T(v)) .
-#             Q(c)    . '''
-# text = '''(P(c1,c2) & Q(x) & T(v)) .
-#             True    . 
-#             (P(c, c4) & True)    . 
-#             False    . '''
-# text = 'all X A(X,Y) .'
-# text = 'all X A(X,Y,c2) .'
-# text = 'all X A(X,Y,c2) & P(X,Z,c) .'
-# text = 'all X A(X,Y) & exists Z P(Z) .'
-# text = 'all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l).'
-# text = 'all X A(X,Y,c2) | - exists Z P(X,Z,c) .'
+class InformationAdder(Transformer):
+    """Adds info about quantified variables and quantified atoms. The formula MUST be in prenex CNF"""
+    def __init__(self, model: Model, visit_tokens = True):
+        super().__init__(visit_tokens)
+        self.model = model
+
+    def equality_atom(self, items):
+        info = {"atoms":{"=": {"weight": 0, "arity": 2, "arguments": [{"terms": items, "positive": True}]}}}
+        ret = Tree("equality_atom", items)
+        ret.explanation = info
+        return ret
+    def predicate(self, items):
+        predicate_symbol, *terms = items
+        print(items)
+        terms = [term.value for term in terms]
+        arity = len(terms)
+        weight = len(self.model.ordered_truth_table[predicate_symbol])
+        info = {"atoms":{predicate_symbol.value: {"weight": weight, "arity": arity, "arguments": [{"terms": terms, "positive": True}]}}}
+        ret = Tree("predicate", items)
+        ret.explanation = info
+        return ret
+    def info_binary_op(self, items, op: str):
+        left, right = items
+        merged = copy.deepcopy(left.explanation)
+        for predicate_symbol, info in right.explanation["atoms"].items():
+            if not predicate_symbol in merged["atoms"].keys():
+                merged["atoms"].update({predicate_symbol: copy.deepcopy(info)})
+            else:
+                merged["atoms"][predicate_symbol]["arguments"] = list(set(merged["atoms"][predicate_symbol]["arguments"]).union(set(copy.deepcopy(right.explanation["atoms"][predicate_symbol]["arguments"]))))
+        ret = Tree(op, items)
+        ret.explanation = merged
+        return ret
+    conjunction = conjunction_exc = partialmethod(info_binary_op, op = "conjunction")
+    disjunction = disjunction_exc = partialmethod(info_binary_op, op = "disjunction")
+    entailment = entailment_exc = partialmethod(info_binary_op, op = "entailment")
+    reverse_entailment = reverse_entailment_exc = partialmethod(info_binary_op, op = "reverse_entailment")
+    equivalence_entailment = equivalence_entailment_exc = partialmethod(info_binary_op, op = "equivalence_entailment")
+
+    def negation(self, items):
+        info = items[0].explanation
+        if len(info.keys()) > 1:
+            raise TypeError(f"Negation got information: {items}. This should not happen if the formula is in PCNF!")
+        negated_info = copy.deepcopy(info)
+        negated_atom_symmbol, negated_atom_info = list(negated_info["atoms"].items())[0]
+        if not negated_atom_info["arguments"][0]["positive"]: 
+            raise TypeError(f"Negation got information: {items} where the one predicate is negated. This should not happen if the formula is in PCNF!")
+        negated_atom_info["arguments"][0]["positive"] = False
+        ret = Tree("negation", items)
+        ret.explanation = negated_info
+        return ret
+    negation_exc = negation
+    def quantification(self, items, op: str):
+        variable, inner_formula = items
+        merged = copy.deepcopy(inner_formula.explanation)
+        if not "quantifications" in merged.keys():
+            merged.update({"quantifications": [(op, variable.value)]})
+        else:
+            merged = copy.deepcopy(inner_formula.explanation)
+            merged["quantifications"] = [(op, variable.value)] + copy.copy(inner_formula.explanation["quantifications"])
+        
+        ret = Tree(op, items)
+        ret.explanation = merged
+        return ret
+    universal_quantification = partialmethod(quantification, op="all")
+    existential_quantification = partialmethod(quantification, op="exists")
+
+# model_text = """A(v).A(u).A(8).B(v).C(x)."""
+# axiom_text = """exists Y A(Y) & B(Y).
+#                 all Y A(Y) & B(Y).
+#                 all X A(X) <-> B(X).
+#                 exists X C(X)."""
+# axiom_text = """exists X C(X)."""
+# axiom_text = """exists Y all X A(X) <-> - B(X)."""
+# p9model = P9ModelReader()
+# modelAST: Tree = prover9_parser.parse(model_text)       
+# axiomAST: Tree = prover9_parser.parse(axiom_text)
+# model = p9model.read_model(modelAST)
+# infoAdd = InformationAdder(model = model)
+# annotatedAxiomaAst = infoAdd.transform(axiomAST)
+# treeExplainer(axiomAST)
+# treeExplainer(annotatedAxiomaAst)
+# # print(annotatedAxiomaAst.pretty())
+# quit()
 
 
-class P9Explainer(Visitor):
-    """Visits tree and reads explanations of evaluation. Obsolete, use treeExplainer """
-    
-    def explain(self, tree: Tree):
-        self.visit(tree)
-        return ">>>explanation should appear nearby<<<"
 
-    def explain_(self, tree: Tree):
-        if hasattr(tree, "explanation"):
-            print(f"node {tree.data} with presentation \n {tree.pretty()} --> {tree.explanation}")
-    
-    equality_atom = explain_
-    predicate = explain_
-    existential_quantification = explain_
-    universal_quantification = explain_
-    conjunction = explain_
-    disjunction = explain_
-    conjunction_exc = explain_
-    disjunction_exc = explain_
-    entailment = explain_
-    reverse_entailment = explain_
-    equivalence_entailment = explain_
-    entailment_exc = explain_
-    reverse_entailment_exc = explain_
-    equivalence_entailment_exc = explain_
-    negation = explain_
-    negation_exc = explain_
 
-    # do_nothing = lambda self, items: items
-    # car = lambda self, items: items[0]
-    # start = car
-    # lines = car
-    # line = car
-    # sentence = car
-
-    # label = lambda self, items: None
+class P9SparseEvaluator(Interpreter):
+    """..."""
+    def evaluate(self
 
 class P9Evaluator(Interpreter):
     """Evaluates a sentence give a model. 
@@ -76,12 +114,13 @@ class P9Evaluator(Interpreter):
         self.is_a_tqdm_running = False
         self.options = options
         self.quantification_type_to_inner_truth_value = {"universal":False, "existential":True}
-        if not set(options) <= POSSIBLE_OPTIONS: raise AssertionError(f"Called with options={options}, but options can only be {POSSIBLE_OPTIONS}")
+        # if not set(options) <= POSSIBLE_OPTIONS: raise AssertionError(f"Called with options={options}, but options can only be {POSSIBLE_OPTIONS}")
         if "equivalence" in options:
             self.p9extractor = P9FreeVariablesExtractor()
             self.equivalences = {frozenset({"="}):[set(model.signature.constants)]} # Equality is added since the way the models are written every costant is '='-equivalent
             for predicate in self.model.signature.predicates: 
                 self.equivalences.update({frozenset({predicate}): find_equivalent(self.model.ordered_truth_table[predicate], self.model)})
+        # self.to_explain = to_explain
 
     def get_equivalent_representatives(self, tree, substitutions: dict[str,str]):
         free_variables, axiom_signature = self.p9extractor.extract_free_variables_and_signature(tree)
@@ -131,6 +170,8 @@ class P9Evaluator(Interpreter):
         return self.visit_children(tree)
     def pass_car_and_explain(self, tree: Tree):
         truth_value_list = self.visit_children(tree)[0]
+        
+        # P9Explainer().visit(tree)
         return truth_value_list 
     def pass_car(self, tree: Tree):
         return self.visit_children(tree)[0]
@@ -249,173 +290,6 @@ class P9Evaluator(Interpreter):
         truth_value = str(left_member) == str(right_member)
         tree.explanation = f"{truth_value} with {tree.additional_data}"
         return truth_value
-    
-    def true(self, tree: Tree):
-        tree.explanation = f"True with anything"
-        return True
-    def false(self, tree: Tree):
-        tree.explanation = f"False with anything"
-        return False
 
-def loop_on_file(file_path: str, action) -> None:
-    lines = open(file_path, "rt").readlines()
-    for line in lines:
-        no_comment_line = re.sub("%.*", "", line)
-        no_comment_line = no_comment_line.replace("\n","")
-        if no_comment_line in ["", "\n"] :
-            continue
-        axiom = no_comment_line
-        ...
-
-def read_model_file(model_file: str) -> Model:
-    """Read file as a whole and returns corresponding model"""
-    model_text = open(model_file, "rt").read()
-    print("reading model file as a whole...")
-    no_comment_model_text = re.sub("%.*", "\n", model_text)
-    
-    p9reader = P9ModelReader()
-    modelAST: Tree = prover9_parser.parse(no_comment_model_text)       
-    model = p9reader.read_model(modelAST)
-
-    if "=" in model.signature.predicates:
-        raise TypeError(f"Equality was found in the model. It should not be there, and instead all constants should be assumed to be different")
-
-    print(f"...read model file. The model has {len(model.signature.constants)} constants and {len(model.signature.predicates)} predicates")
-    return model
-
-# model = read_model_file("model.p9")
-
-def check_axioms_file(axioms_file: str, model: Model, options: list[str], multiprocessing_required = False, processes_number = 4):
-    """Read file line by line as a whole and checks axioms one-by-one against given model"""
-    
-    lines = open(axioms_file, "rt").readlines()
-    
-    if not multiprocessing_required:
-        check_lines(lines, model, options)
-    else: 
-        if processes_number < 1: raise TypeError(f"Asked for multiprocessing with non-positive process number")
-        subliness = [lines[i::processes_number] for i in range(processes_number)]
-        for sublines in subliness:
-            process = ...
-            process.execute(check_lines, sublines, model, options)
-
-def check_lines(lines: list[str], model: Model, options: list[str]):    
-    p9variables = P9FreeVariablesExtractor()
-    p9evaluator = P9Evaluator(model, options)
-    p9explainer = P9Explainer()
-    
-    axioms_true = 0
-    axioms_false = 0
-    # for line in tqdm(lines):
-    for line in lines:
-        no_comment_line = re.sub("%.*", "", line) # the regex "%.*\n" is wrong because it will not match the last line of a file
-        no_comment_line = no_comment_line.replace("\n","")
-        if no_comment_line in ["", "\n"] :
-            continue
-        if "set(prolog_style_variables)" in no_comment_line: #ignore setting options
-            continue
-        axiom_text = no_comment_line
-        axiomsAST: Tree = prover9_parser.parse(axiom_text)
-        free_variables, axiom_signature = p9variables.extract_free_variables_and_signature(axiomsAST)
-        if "=" in model.signature.predicates:
-            raise TypeError(f"Equality was found in the model. It should not be there, and instead all constants should be assumed to be different")
-        if len(free_variables) > 0:
-            raise TypeError(f"An axiom was found with a free, unquantified, variable. The axiom is {axiom_text}. The free variables are {free_variables} and the parsed tree is {axiomsAST.pretty()}")
-        if (not set(axiom_signature.constants) <= set(model.signature.constants)):
-            raise TypeError(f"An axiom was found with a constant that does not appear in the model!, the problematic constants are {set(axiom_signature.constants).difference(set(model.signature.constants))}")
-        if (not set(axiom_signature.predicates) <= set(model.signature.predicates)):
-            print(f"Warning: An axiom was found with a predicate that does not appear in the model! axioms_signature.predicates = {axiom_signature.predicates} and model.signature.predicates={model.signature.predicates}. This may or may not be correct (if it is a matter of the equality it is correct).")
-        for predicate, arity in axiom_signature.predicates.items():
-            if predicate in model.signature.predicates and model.signature.predicates[predicate] != arity:
-                raise TypeError(f"An axiom was found with the predicate {predicate} of arity {arity}, but in the model the same predicate has arity {model.signature.predicates[predicate]}!")
-
-
-        print(f"evaluating >>>{axiom_text}<<< against given model...")
-        evaluation = p9evaluator.evaluate(axiomsAST)
-        
-        print(f"...evaluation result is >>>{evaluation}<<<")
-        if evaluation == [False]:
-            axioms_false += 1
-            print(f"Evaluation of axiom >>>{axiom_text}<<< is False! Generating explanation...")
-            #p9explainer.explain(axiomsAST)
-            treeExplainer(axiomsAST)
-            print(f"Above should have appeared an explanation of why >>>{axiom_text}<<< is False")
-            break #TODO
-        else:
-            axioms_true += 1
-    print(f"Axioms analysis ended. Found {axioms_true}/{axioms_true+axioms_false} true axioms and {axioms_false}/{axioms_true+axioms_false} false axioms.")
-    if axioms_false > 0:
-        print(f"Some axioms were evaluated as false. Check printed output for information on which they were and why they were evaluated as false.")
-
-def check_model_against_axioms(model_file: str, axioms_file: str, options: list[str])->None:
-    start1 = time.time()
-    model = read_model_file(model_file)
-    stop1 = time.time()
-    
-    start2 = time.time()
-    check_axioms_file(axioms_file, model, options)
-    stop2 = time.time()
-    print(f"To read model {stop1-start1} seconds were required")
-    print(f"To check axioms {stop2-start2} seconds were required")
-
-
-class P9SignatureExtractor(Transformer):
-    """Extract the signature from a formula. E.g. all X A(X,Y,c2) | - exists Z P(X,Z,c) .  ---> {A, P}"""
-
-    def equality_atom(self, items):
-        return {"="}
-    
-    def predicate(self, items):
-        predicate_symbol, *term_list = items
-        predicate_symbol = predicate_symbol.value
-        arity = len(term_list)
-        return {predicate_symbol}
-
-    def existential_quantification(self, items):
-        quantified_variable, signature_from_inner_formula = items
-        return signature_from_inner_formula
-    universal_quantification = existential_quantification
-    
-    merge_signatures = lambda self, items: set().union(*(var_set for var_set in items))
-    
-    conjunction = merge_signatures
-    disjunction = merge_signatures
-    conjunction_exc = merge_signatures
-    disjunction_exc = merge_signatures
-    entailment = merge_signatures
-    reverse_entailment = merge_signatures
-    equivalence_entailment = merge_signatures
-    entailment_exc = merge_signatures
-    reverse_entailment_exc = merge_signatures
-    equivalence_entailment_exc = merge_signatures
-    negation = merge_signatures
-    negation_exc = merge_signatures
-
-    do_nothing = lambda self, items: items
-    car = lambda self, items: items[0]
-    start = car
-    lines = car
-    line = car
-    sentence = car
-
-    label = lambda self, items: None
-
-def test_signature_extraction():
-    p9sig = P9SignatureExtractor()
-    assert p9sig.transform(prover9_parser.parse("all X exists Y P(X,Y) & X=Y .")) == {'=', 'P'}; print("""p9sig.transform(prover9_parser.parse("all X exists Y P(X,Y) & X=Y .")) == {'=', 'P'}""")
-    assert p9sig.transform(prover9_parser.parse("((all X exists Y P(X,Y) & X=Y) | (exists X exists Z all U all V (E(X,y,Z) & R(U,V)))) .")) == {'=', 'P', 'E', 'R'}; print("""p9sig.transform(prover9_parser.parse("((all X exists Y P(X,Y) & X=Y) | (exists X exists Z all U all V (E(X,y,Z) & R(U,V)))) .")) == {'=', 'P', 'E', 'R'}""")
-    assert p9sig.transform(prover9_parser.parse("all X all Y P(X) & Q(Y) .")) == {'P', 'Q'}; print("""p9sig.transform(prover9_parser.parse("all X all Y P(X) & Q(Y) .")) == {'P', 'Q'}""")
-
-# test_signature_extraction()
-
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser(prog='FOL model checker',description='Simply supply the location of a file containing a model and of a file containing a theory')
-    parser.add_argument('-m', '--model_file', type = str, help="Model file location")
-    parser.add_argument('-a', '--axioms_file', type = str, help="Axiom file location")
-    parser.add_argument('-o', '--options', type = str, nargs = "+", default = [], help="Options. Currently only 'equivalence' is supported")
-    args = parser.parse_args()
-    print(args)
-    check_model_against_axioms(args.model_file, args.axioms_file, args.options)
 
     
