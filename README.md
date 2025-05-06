@@ -5,15 +5,23 @@ The theory is supplied as a list of axioms.
 
 The syntax is similar to that of [Prover9](https://www.cs.unm.edu/~mccune/mace4/).
 
-The algorithm is a simple brute force approach that evaluates all axioms sequentially. If an axioms is false the algorithm stops and explains why the axioms was evaluated false. 
+As of now two evaluation strategies have been implemented: 
+- a simple, nested-loop style brute-force approach that evaluates all axioms sequentially.
+- an equivalence-based strategy, that reduces the size of the quantification domain for each quantifier: given the signature of the quantified formula, all the constants that cannot be distinguished by the symbols in the signature are collapsed together. 
+In both strategies if an axioms is false the algorithm stops and explains why the axioms was evaluated false.
 
-Simply run check.py supplying the path to a file containing a model and the path to a file containing a theory (e.g. `>python check.py DOLCE-clay-statue-model.p9 DOLCE-clay-statue-axioms.p9`).
+A third strategy is under development:
+- a further reduction of the quantification domains based on the a-priori determination of simple range expressions that the quantified variables must satisfy.   
+
+Simply run check.py supplying the path to a file containing a model and the path to a file containing a theory (e.g. `>python check.py DOLCE-clay-statue-model.p9 DOLCE-clay-statue-axioms.p9`). 
+Default evaluation strategy is btute force. Supply a value to `--options` (currently can only be `equivalence`) to change the evauation strategy. 
+
 Some tests are present in `tests.py`. They can be run by executing that file. The `DOLCE-clay-statue` model and axioms files are an example of model and theory files, as well as an additional tests. 
 
 Note that the complexity of the algorithm is O(c^a) where c is the number of constants in the model, and a is the maximum nesting-depth of quantifiers.   
 
 ## TODOS
-- Implement faster strategies in addition to brute force. 
+- Implement faster strategies in addition to brute force and equivalence. 
 - Implement simplified treatment for defined predicates.
 - Implement functions.
 
