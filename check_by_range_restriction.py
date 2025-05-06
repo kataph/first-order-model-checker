@@ -1,15 +1,17 @@
 from typing import Any
-from model import Model
+from model import Model, P9ModelReader
 
-from lark import Tree, Transformer
+from lark import Token, Tree, Transformer
 from lark.visitors import Visitor, Interpreter
 
 from functools import partialmethod, partial, wraps
+from itertools import product 
 
 from model import prover9_parser
+from join_algorithms import Relation, hash_join
 
 
-from basic_formulas_manipulation import ToReversePrenexCNF, P9FreeVariablesExtractor, ToPrenexCNF, ToUniqueVariables, BINARY_OPS, dual_quantifier, dual_op, treeExplainer, RemoveLines, ToString
+from basic_formulas_manipulation import ToReversePrenexCNF, P9FreeVariablesExtractor, ToPrenexCNF, ToUniqueVariables, BINARY_OPS, dual_quantifier, dual_op, treeExplainer, RemoveLines, ToString, get_existential_closure
 
 EXAMPLE_AXIOMS = [
     "(exists X all Y lec(Y) -> att(X,Y)).",
@@ -250,10 +252,19 @@ class ExistentialFormulaTransformer(Transformer):
     
 class GetRange(ExistentialFormulaTransformer):
     """Get range of a formula. If the formula is not in the shape (exists X phi) an error will be raised.
-        For example, (- A(x,y) and exists B(z)) -> error, (exists x all y lec(y) -> att(x,y)) -> range: exists y att(x,y)"""
-    def __init__(self):
+        For example, (- A(x,y) and exists B(z)) -> error, (exists x all y lec(y) -> att(x,y)) -> range: exists y att(x,y). 
+        If the `static` input attribute is true the formula returned is the existential closure of the range (except for the ranged variable), otherwise free variable may be present that are inherited by higher-level quantifications"""
+    def __init__(self, static: bool = False):
         super().__init__()
+        self.static = static 
     
+    def adjust_transform_repeatedly(self, tree):
+        finalized_tree: Tree = super().adjust_transform_repeatedly(tree)
+        if not self.static:
+            return finalized_tree
+        else: 
+            return get_existential_closure(finalized_tree, exceptions={self.ranged_variable})
+
     universal_quantification = reduce_to_existential_quantifier
     existential_quantification = partialmethod(remove_useless_quantification, param = "existential_quantification")
     def disjunction(self, children):
@@ -283,16 +294,21 @@ class GetRange(ExistentialFormulaTransformer):
 
 class GetCoRange(ExistentialFormulaTransformer):
     """Get co-range of a formula. If the formula is not in the shape (exists X phi) an error will be raised.
-        For example, (- A(x,y) and exists B(z)) -> error, (exists x all y lec(y) -> att(x,y)) -> co-range: all y - lec(y)"""
-    def __init__(self):
+        For example, (- A(x,y) and exists B(z)) -> error, (exists x all y lec(y) -> att(x,y)) -> co-range: all y - lec(y)
+        If the `static` input attribute is true the formula returned is the existential closure of the co-range (except for the ranged variable), otherwise free variable may be present that are inherited by higher-level quantifications"""
+    def __init__(self, static: bool = False):
         super().__init__()
+        self.static = static 
     
     def adjust_transform_repeatedly(self, tree):
         finalized_tree: Tree = super().adjust_transform_repeatedly(tree)
         if len(list(finalized_tree.find_data('cond'))) > 0:
             return Tree("false", [])
         else:
-            return finalized_tree
+            if not self.static:
+                return finalized_tree
+            else: 
+                return get_existential_closure(finalized_tree, exceptions={self.ranged_variable})
     
     existential_quantification = partialmethod(remove_useless_quantification, param = "existential_quantification")
     existential_quantification = partialmethod(remove_useless_quantification, param = "existential_quantification")
@@ -348,28 +364,251 @@ def get_universal_bound_form(ast: Tree) -> Tree:
     else:
         return Tree("conjunction", [corange, Tree("universal_quantification_bounded", [ranged_variable, Tree("bound", [range]), ranged_formula])])
 
+class toBoundedMinifiedCNF(Transformer):
+    """Transformer to manipulate an existential formula. If the formula is not in the shape (exists X phi) an error will be raised.
+        For example, (- A(x,y) and exists B(z)) -> error"""
+    def __init__(self, visit_tokens = True):
+        super().__init__(visit_tokens)
+        self.freeVars = P9FreeVariablesExtractor()
+        self.toPCNF = ToPrenexCNF()
+        self.commutes = {"existential_quantification":"disjunction", "universal_quantification":"conjunction"}
+        self.CNFminiscoper = ToReversePrenexCNF()
+        self.stringer = ToString()
+        self.remover = RemoveLines()
+        self.variablesAdjuster = ToUniqueVariables()
+    
+    def adjust_transform_repeatedly(self, tree):
+        # the formula is CNF minified and corrected for variables.
+        CNFminiscoped_ranged_formula = self.CNFminiscoper.adjust_transform_repeatedly(tree)
+        if CNFminiscoped_ranged_formula != tree:
+            print(f"Attention: the formula was not CNFminiscoped. I have CNFminiscoped it.")
 
-asts = [RemoveLines().transform(prover9_parser.parse(example_axiom)) for example_axiom in EXAMPLE_AXIOMS]
-miniscopeAsts = [ToReversePrenexCNF().adjust_transform_repeatedly(ast) for ast in asts]
+        adjusted_tree = self.variablesAdjuster.adjust_variables(CNFminiscoped_ranged_formula)
+        oldtree = adjusted_tree
+        newtree = self.variablesAdjuster.adjust_variables(self.transform(adjusted_tree))
+        while newtree != oldtree:
+            oldtree = newtree
+            newtree = self.variablesAdjuster.adjust_variables(self.transform(oldtree))
+        return newtree
 
-treeExplainer(asts[0])
-# range0 = GetRange().adjust_transform_repeatedly(asts[0])
-# corange0 = GetCoRange().adjust_transform_repeatedly(asts[0])
-# treeExplainer(range0)
-# treeExplainer(corange0)
-# canonical = get_range_corange_form(asts[0])
-# treeExplainer(canonical)
-treeExplainer(get_existential_bound_form(asts[0]))
+    def universal_quantification(self, children):
+        return get_universal_bound_form(Tree("universal_quantification", children))
+    def existential_quantification(self, children):
+        return get_universal_bound_form(Tree("universal_quantification", children))
 
 
-treeExplainer(asts[1])
-# range1 = GetRange().adjust_transform_repeatedly(asts[1])
-# corange1 = GetCoRange().adjust_transform_repeatedly(asts[1])
-# treeExplainer(range1)
-# treeExplainer(corange1)
-# canonical = get_range_corange_form(asts[1])
-# treeExplainer(canonical)
-treeExplainer(get_existential_bound_form(asts[1]))
+class evaluateQuantifierBound(Transformer):
+    """Given a quantifier bound for a certain variable and formula, it calculates the set of all constants that satisfy the (existential closure of the) formula. E.g. with the model A(a,b).B(a,c).V(a,b,z), the bound {X | exists Y A(X,Y) & exists Z B(X,Z)} is evaluated to {a}.
+    Assumes that the bounding formula is existentially closed except for the bounded variable."""
+    def __init__(self, ranged_variable, model: Model, visit_tokens = True):
+        super().__init__(visit_tokens)
+        self.ranged_variable = ranged_variable
+        self.model = model
 
+    def true(self, items):
+        return Relation((), True) 
+    def false(self, items):
+        return Relation((), False) 
+    
+    def dom(self, items):
+        ranged_variable = items[0]
+        return Relation((ranged_variable,), set((constant,) for constant in self.model.signature.constants))
+    
+    def equality_atom(self, items):
+        """The equality is considered like a predicate"""
+        left_member, right_member = items
+        tuple_set: set | bool
+        tuple_set = set()
+        tuple_header = tuple()
+        if not isinstance(left_member, Token) or not isinstance(right_member, Token):
+            raise AssertionError(f"Either the left member or the right member of the equality atom {items} is not a Token. This should never happen")
+        if left_member.type == right_member.type == "VARIABLE":
+            tuple_header = (left_member.value, right_member.value)
+            for constant in self.model.signature.constants:
+                tuple_set.add((constant,constant))
+        if left_member.type == "CONSTANT" and right_member.type == "VARIABLE":
+            tuple_header = (right_member.value,)
+            tuple_set.add((left_member.value,))
+        if left_member.type == "VARIABLE" and right_member.type == "CONSTANT":
+            tuple_header = (left_member.value,)
+            tuple_set.add((right_member.value,))
+        if left_member.type == right_member.type == "CONSTANT":
+            tuple_set = left_member.value == right_member.value
+        if tuple_set == set(): tuple_set = False # Empty tuple set defaults to False
+        return Relation(tuple_header,tuple_set)
+    
+    def predicate(self, items):
+        predicate_symbol, *term_list = items
+        predicate_symbol = predicate_symbol.value
+        tuple_set: set | bool
+        tuple_set = set()
+        tuple_header = tuple()
+        if not all(isinstance(token, Token) for token in term_list): 
+            raise AssertionError(f"Found non-token in predicate {predicate_symbol} (one of {term_list}). This should not happen")
+        if not "VARIABLE" in (token.type for token in term_list): 
+            # only constants
+            tuple_set = tuple(token.value for token in term_list) in self.model.ordered_truth_table[predicate_symbol]
+        if not "CONSTANT" in (token.type for token in term_list): 
+            # only variables
+            tuple_header = tuple(token.value for token in term_list)
+            for tuple_of_constants in self.model.ordered_truth_table[predicate_symbol]:
+                assert len(term_list) == len(tuple_of_constants), f"The predicate {predicate_symbol} has the wrong number of values!"
+                tuple_set.add(tuple_of_constants)
+        else:
+            # there is at least one constant
+            indices_of_constants = [i for i,token in enumerate(zip(term_list, )) if token.type=="CONSTANT"]
+            tuple_header = tuple(token.value for token in term_list if token.type=="CONSTANT")
+            for tuple_of_constants in self.model.ordered_truth_table[predicate_symbol]:
+                assert len(term_list) == len(tuple_of_constants), f"The predicate {predicate_symbol} has the wrong number of values!"
+                for i in indices_of_constants:
+                    if tuple_of_constants[i] != term_list[i].value:
+                        continue
+                # now the tuple_of_constant matches, in the right positions, all constants present in the term_list. I can then save the constants that match the variables
+                tuple_set.add(tuple(constant for token, constant in zip(term_list, tuple_of_constants) if token.type == "VARIABLE"))
+        if tuple_set == set(): tuple_set = False # Empty tuple set defaults to False
+        return Relation(tuple_header, tuple_set)
+
+    def negation(self, items):
+        """This is >>>VERY<<< dangerous if the inner formula has many free variables"""
+        if not isinstance(items[0], Relation): 
+            raise TypeError("A negation node in a bounding formula received a non-Relation during evaluation. This probably means that the bounding formula is not in existential CNF, while it should be!")
+        tuples_from_inner_formula = items[0].tuple_set
+        header_from_inner_formula = items[0].tuple_header
+        if tuples_from_inner_formula == set(): tuples_from_inner_formula = False
+        if isinstance(tuples_from_inner_formula, bool):
+            return not tuples_from_inner_formula
+        arity = len(header_from_inner_formula)
+        tuple_of_all_constants = tuple(self.model.signature.constants)
+        tuple_set = set(product(tuple_of_all_constants, repeat = arity)).difference(tuples_from_inner_formula) 
+        return Relation(header_from_inner_formula, tuple_set)
+    negation_exc = negation
+
+    def conjunction(self, items):
+        left_evaluation, right_evaluation = items
+        if not (isinstance(left_evaluation, Relation) and isinstance(right_evaluation, Relation)): 
+            raise TypeError("A conjunction node in a bounding formula received a non-Relation during evaluation. This probably means that the bounding formula is not in existential CNF, or that it contains subformulas that do not depend on the ranged variable. This should not happen!")
+        if left_evaluation.tuple_set == set(): left_evaluation.tuple_set = False
+        if right_evaluation.tuple_set == set(): right_evaluation.tuple_set = False
+
+        if False in [left_evaluation.tuple_set, right_evaluation.tuple_set]:
+            return Relation(tuple(), False)
+        if True == left_evaluation.tuple_set: return right_evaluation
+        if True == right_evaluation.tuple_set: return left_evaluation
+
+        left_variables = left_evaluation.tuple_header
+        right_variables = right_evaluation.tuple_header
+
+        # if there are no common variables, the join becomes a cartesian product
+        if set(left_variables).intersection(right_variables) == set():
+            tuple_set = set()
+            tuple_header = left_variables+right_variables
+            for left_tuple in left_evaluation.tuple_set:
+                for right_tuple in right_evaluation.tuple_set:
+                    tuple_set.add(left_tuple + right_tuple)
+            joined_relation = Relation(tuple_header, tuple_set)
+        # if there are common variables, a hash join on the common variables is executed
+        elif set(left_variables).intersection(right_variables) != set():
+            keys = set(left_variables).intersection(right_variables)
+            joined_relation = hash_join(left_evaluation, right_evaluation, keys = tuple(keys))
+        return joined_relation
+    conjunction_exc = conjunction
+
+    def disjunction(self, items):
+        left_evaluation, right_evaluation = items
+        if not (isinstance(left_evaluation, Relation) and isinstance(right_evaluation, Relation)): 
+            raise TypeError("A conjunction node in a bounding formula received a non-Relation during evaluation. This probably means that the bounding formula is not in minified existential CNF, while it should be!")
+
+        if True in [left_evaluation.tuple_set, right_evaluation.tuple_set]:
+            return Relation(tuple(), True)
+        if False == left_evaluation.tuple_set: return right_evaluation
+        if False == right_evaluation.tuple_set: return left_evaluation
+
+        if not left_evaluation.tuple_header == right_evaluation.tuple_header == (self.ranged_variable,): 
+            raise TypeError("A conjunction node in a bounding formula received non-unary/nullary relations or relations having a free variable that is not the ranged variable. This probably means that the bounding formula is not in minified existential CNF, while it should be!")
+
+        # the relations are just e.g. ('X',), {("c1",),("c2",),...} and ('X',), {("c21",),("c22",),...}. So ww just need to take a simple union
+        return Relation((self.ranged_variable,), left_evaluation.tuple_set.union(right_evaluation.tuple_set))
+    disjunction_exc = disjunction
+
+    def universal_quantification(self, items):
+        raise TypeError("Universal quantification should not be encountered in bounding formulas!")
+    
+    def existential_quantification(self, items):
+        quantified_variable, relation_from_inner_formula = items
+        if not isinstance(quantified_variable, Token) or not isinstance(relation_from_inner_formula, Relation):
+            raise TypeError(f"Something wrong with returned variable or tuples: {quantified_variable} or {relation_from_inner_formula}")
+        if quantified_variable == self.ranged_variable:
+            raise TypeError(f"Quantified variable {quantified_variable} is the same as the ranged variable! This should not happen.")
+        if relation_from_inner_formula.tuple_set == False: return Relation((), False)
+        if relation_from_inner_formula.tuple_set == True: return Relation((), True)
+        
+        if not quantified_variable in relation_from_inner_formula.tuple_header:
+            raise TypeError(f"Quantified variable {quantified_variable} does not appear among the variables of the relation from the quantified formula, which are {relation_from_inner_formula.tuple_header}")
+        projection_header = tuple(var for var in relation_from_inner_formula.tuple_header if var != quantified_variable)
+        projection_indices = tuple(i for i,var in enumerate(relation_from_inner_formula.tuple_header) if var != quantified_variable)
+        projection = Relation(projection_header, set())
+        for t in relation_from_inner_formula.tuple_set:
+            projection.tuple_set.add(tuple(t[i] for i in projection_indices))
+        return projection
+
+    def empty(self, items):
+        raise TypeError("Encountered 'empty' in a bounding formula. This should never happen!")
+    def cond(self, items):
+        raise TypeError("Encountered 'cond' in a bounding formula. This should never happen!")
+    
+    def shouldnt_appear(self, items): 
+        raise TypeError("This node should not appear in bounding formulas!")
+    entailment = shouldnt_appear
+    reverse_entailment = shouldnt_appear
+    equivalence_entailment = shouldnt_appear
+    entailment_exc = shouldnt_appear
+    reverse_entailment_exc = shouldnt_appear
+    equivalence_entailment_exc = shouldnt_appear
+
+    car = lambda self, items: items[0]
+    start = car
+    lines = car
+    line = car
+    sentence = car
+    label = lambda self, items: None
+
+
+def test_bond_evaluation():
+    p9model = P9ModelReader()
+    # model = p9model.read_model(prover9_parser.parse("A(a).B(b).E(a,b)."))
+    # formula = RemoveLines().transform(prover9_parser.parse("exists Y A(X) & E(X,Y)."))
+    model = p9model.read_model(prover9_parser.parse("A(a).B(b).E(a,b).E(b,c).R(c,e).U(e,b)."))
+    # formula = RemoveLines().transform(prover9_parser.parse("exists Z exists Y (E(X,Z) & R(Z,Y) & U(Y))."))
+    formula = RemoveLines().transform(prover9_parser.parse("((exists Z exists Y (E(X,Z) & R(Z,Y))) | (exists Y2 U(Y2,X)))."))
+    evBound = evaluateQuantifierBound("X", model)
+    treeExplainer(model)
+    treeExplainer(formula)
+    x = evBound.transform(formula)
+    print(x)
+
+def test_range_corange_transform():
+    asts = [RemoveLines().transform(prover9_parser.parse(example_axiom)) for example_axiom in EXAMPLE_AXIOMS]
+    miniscopeAsts = [ToReversePrenexCNF().adjust_transform_repeatedly(ast) for ast in asts]
+    treeExplainer(asts[0])
+    # range0 = GetRange().adjust_transform_repeatedly(asts[0])
+    # corange0 = GetCoRange().adjust_transform_repeatedly(asts[0])
+    # treeExplainer(range0)
+    # treeExplainer(corange0)
+    # canonical = get_range_corange_form(asts[0])
+    # treeExplainer(canonical)
+    # treeExplainer(get_existential_bound_form(asts[0]))
+    treeExplainer(toBoundedMinifiedCNF().adjust_transform_repeatedly(asts[0]))
+
+    treeExplainer(asts[1])
+    # range1 = GetRange().adjust_transform_repeatedly(asts[1])
+    # corange1 = GetCoRange().adjust_transform_repeatedly(asts[1])
+    # treeExplainer(range1)
+    # treeExplainer(corange1)
+    # canonical = get_range_corange_form(asts[1])
+    # treeExplainer(canonical)
+    # treeExplainer(get_existential_bound_form(asts[1]))
+    treeExplainer(toBoundedMinifiedCNF().adjust_transform_repeatedly(asts[1]))
+    
+test_range_corange_transform()
 
 

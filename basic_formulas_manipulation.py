@@ -1,4 +1,4 @@
-import functools
+from functools import partialmethod
 
 from lark import Tree, Token, Transformer
 from lark.visitors import Visitor, Interpreter
@@ -119,14 +119,19 @@ class P9FreeVariablesExtractor(Transformer):
         self.axioms_signature.add_predicate(predicate_symbol, arity:=len(term_list))
         return variable_set
 
-    def quantification(self, items):
-        quantified_variable, variables_from_inner_formula = items
+    def quantification(self, items, thereIsBound = False):
+        if thereIsBound:
+            quantified_variable, bound, variables_from_inner_formula = items
+        else:
+            quantified_variable, variables_from_inner_formula = items
         if not isinstance(quantified_variable, Token) or not isinstance(variables_from_inner_formula, set):
             raise TypeError(f"Something wrong with returned variables: {quantified_variable} or {variables_from_inner_formula}")
         difference = variables_from_inner_formula.difference({quantified_variable.value})
         return difference
     existential_quantification = quantification
     universal_quantification = quantification
+    existential_quantification_bounded = partialmethod(quantification, thereIsBound = True)
+    universal_quantification_bounded = partialmethod(quantification, thereIsBound = True)
 
     def empty(self, items):
         return set()
@@ -134,9 +139,9 @@ class P9FreeVariablesExtractor(Transformer):
         ranged_variable = items[0]
         return {str(ranged_variable)}
     
-    merge_variables = lambda self, items: set().union(*(var_set for var_set in items))
-    # def merge_variables(self, items):
-    #     return set().union(*(var_set for var_set in items))
+    # merge_variables = lambda self, items: set().union(*(var_set for var_set in items))
+    def merge_variables(self, items):
+        return set().union(*(var_set for var_set in items))
     conjunction = merge_variables
     disjunction = merge_variables
     conjunction_exc = merge_variables
@@ -184,8 +189,8 @@ class AssociativeFlattener(Transformer):
             else:
                 new_items.append(item)
         return Tree(op, new_items)
-    conjunction = conjunction_exc = functools.partialmethod(flatten_and_or, op = "conjunction")
-    disjunction = disjunction_exc = functools.partialmethod(flatten_and_or, op = "disjunction")
+    conjunction = conjunction_exc = partialmethod(flatten_and_or, op = "conjunction")
+    disjunction = disjunction_exc = partialmethod(flatten_and_or, op = "disjunction")
 
     def negation(self, items):
         negated_formula = items[0]
@@ -201,8 +206,8 @@ class AssociativeFlattener(Transformer):
             *additional_variables, doubly_quantified_formula = inner_formula.children
             return Tree(op, variables + additional_variables + [doubly_quantified_formula])
         return Tree(op, items)
-    universal_quantification = functools.partialmethod(quantification, op="universal_quantification")
-    existential_quantification = functools.partialmethod(quantification, op="existential_quantification")
+    universal_quantification = partialmethod(quantification, op="universal_quantification")
+    existential_quantification = partialmethod(quantification, op="existential_quantification")
 
 # axiom_text = """exists Y exists Z all X all U all UU exists T exists TT ((A(X) | -U(X) | K(X,Z)) & (B(X,Y) | -V(X,Y,Z)) & (C(Z)))."""
 # axiomAST = prover9_parser.parse(axiom_text)
@@ -400,11 +405,11 @@ class ToPrenex(Transformer):
             right_quantified_variable, right_quantified_formula = right.children
             return Tree(left.data, [left_quantified_variable, Tree(right.data, [right_quantified_variable, Tree(operator, [left_quantified_formula, right_quantified_formula])])])
         return Tree(operator, children)
-    # disjunction = functools.partial(binary_op, operator = "disjunction")
+    # disjunction = partial(binary_op, operator = "disjunction")
     def disjunction(self,children):
         return self.symmetric_op(children, "disjunction")
     disjunction_exc = disjunction
-    # conjunction = functools.partial(binary_op, operator = "conjunction")
+    # conjunction = partial(binary_op, operator = "conjunction")
     def conjunction(self,children):
         return self.symmetric_op(children, "conjunction")
     conjunction_exc = conjunction
@@ -506,6 +511,8 @@ class ToConjunctiveNormalForm(Interpreter):
         return Tree("true", [])
     
     def negation(self, tree):
+        print(111111111111)
+        treeExplainer(tree)
         negated_formula = tree.children[0]
         if negated_formula.data in ["disjunction", "conjunction"]:
             left, right = negated_formula.children
@@ -524,12 +531,12 @@ class ToConjunctiveNormalForm(Interpreter):
         return Tree(par , self.visit_children(tree))
     def terminate(self, tree):
         return tree
-    start = functools.partialmethod(pass_par_rule, par = "start")
-    lines = functools.partialmethod(pass_par_rule, par = "lines")
-    line = functools.partialmethod(pass_par_rule, par = "line")
-    conjunction = functools.partialmethod(pass_par, par = "conjunction")
-    universal_quantification = functools.partialmethod(pass_par, par = "universal_quantification")
-    existential_quantification = functools.partialmethod(pass_par, par = "existential_quantification")
+    start = partialmethod(pass_par_rule, par = "start")
+    lines = partialmethod(pass_par_rule, par = "lines")
+    line = partialmethod(pass_par_rule, par = "line")
+    conjunction = partialmethod(pass_par, par = "conjunction")
+    universal_quantification = partialmethod(pass_par, par = "universal_quantification")
+    existential_quantification = partialmethod(pass_par, par = "existential_quantification")
     # def universal_quantification(self, tree):
     #     return Tree("universal_quantification", [])
     predicate = terminate
@@ -618,8 +625,8 @@ class ToReversePrenexCNF(Transformer):
             left, right = quantified_formula.children
             return Tree(quantified_formula.data, [Tree(quantification_type, [quantified_variable, left]), Tree(quantification_type, [quantified_variable, right])])
         return Tree(quantification_type, [quantified_variable, quantified_formula])
-    existential_quantification = functools.partialmethod(quantification, quantification_type = "existential_quantification")
-    universal_quantification = functools.partialmethod(quantification, quantification_type = "universal_quantification")
+    existential_quantification = partialmethod(quantification, quantification_type = "existential_quantification")
+    universal_quantification = partialmethod(quantification, quantification_type = "universal_quantification")
 
     def negation_exc(self, children):
         negated_formula = children[0]
@@ -656,11 +663,11 @@ class ToString(Interpreter):
         yes_left_par = left.data not in ["predicate", "equality_atom"]
         yes_right_par = right.data not in ["predicate", "equality_atom"]
         return "("*yes_left_par+self.visit(left)+")"*yes_left_par + f" {op} " + "("*yes_right_par+self.visit(right)+")"*yes_right_par
-    entailment = functools.partialmethod(print_binary_op, op = "->")
-    reverse_entailment = functools.partialmethod(print_binary_op, op = "<-")
-    equivalence_entailment = functools.partialmethod(print_binary_op, op = "<->")
-    disjunction = functools.partialmethod(print_binary_op, op = "|")
-    conjunction = functools.partialmethod(print_binary_op, op = "&")
+    entailment = partialmethod(print_binary_op, op = "->")
+    reverse_entailment = partialmethod(print_binary_op, op = "<-")
+    equivalence_entailment = partialmethod(print_binary_op, op = "<->")
+    disjunction = partialmethod(print_binary_op, op = "|")
+    conjunction = partialmethod(print_binary_op, op = "&")
     entailment_exc = entailment
     equivalence_entailment_exc = reverse_entailment
     equivalence_entailment_exc = equivalence_entailment
@@ -675,8 +682,15 @@ class ToString(Interpreter):
     def print_quantification_op(self, tree, op: str):
         variable, quantified_formula = tree.children
         return f"{op} {variable} ({self.visit(quantified_formula)})"
-    universal_quantification = functools.partialmethod(print_quantification_op, op = "all")
-    existential_quantification = functools.partialmethod(print_quantification_op, op = "exists")
+    universal_quantification = partialmethod(print_quantification_op, op = "all")
+    existential_quantification = partialmethod(print_quantification_op, op = "exists")
+
+    def print_bounded_quantification_op(self, tree, op: str):
+        variable, bound, quantified_formula = tree.children
+        bounding_formula = bound.children[0]
+        return f"{op} ({variable} ∈ {{{variable} | {self.visit(bounding_formula)}}}) ({self.visit(quantified_formula)})"
+    universal_quantification_bounded = partialmethod(print_bounded_quantification_op, op = "all")
+    existential_quantification_bounded = partialmethod(print_bounded_quantification_op, op = "exists")
 
     def equality_atom(self, tree):
         left, right = tree.children
@@ -688,6 +702,11 @@ class ToString(Interpreter):
     
     def VARIABLE(self, tree):
         return str(tree)
+    
+    def true(self, tree):
+        return "True"
+    def false(self, tree):
+        return "False"
 
     def pass_par_rule(self, tree, par: str):
         return Tree(Token("RULE", par) , self.visit_children(tree))
@@ -720,3 +739,14 @@ class RemoveLines(Transformer):
         assert lines.children[0].data == "line"
         line = lines.children[0]
         return (axiom:=line.children[0])
+    
+def get_existential_closure(tree: Tree, exceptions = {}) -> Tree:
+    free_vars: set[str] = P9FreeVariablesExtractor().extract_free_variables_and_signature()[0]
+    vars_to_close = free_vars.difference(exceptions)
+    closed_tree = tree.copy()
+    for var in vars_to_close:
+        closed_tree = Tree("existential_quantification", [var, closed_tree])
+    return closed_tree
+
+
+

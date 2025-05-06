@@ -127,13 +127,14 @@ class Model:
         else: 
             return "\nMODEL>>>\t"+self.model_text
     def add_predicate_value(self, predicate_symbol: str, arguments: tuple[str | Token]):
+        """Save both e.g. ('P', ('x', 'y')): True in truth_table and ('x', 'y'): True in ordered_truth_table['P']. The 'True' value is there in the case of needing to salve also false, or multivalued, values."""
         arguments = tuple(str(argument) for argument in arguments)
         if (predicate_symbol,arguments) not in self.truth_table: 
             self.truth_table[(predicate_symbol,arguments)] = True
         if predicate_symbol not in self.ordered_truth_table: 
-            self.ordered_truth_table[predicate_symbol] = {arguments: ""}
+            self.ordered_truth_table[predicate_symbol] = {arguments: True}
         elif not arguments in self.ordered_truth_table[predicate_symbol]:
-            self.ordered_truth_table[predicate_symbol].update({arguments: ""})
+            self.ordered_truth_table[predicate_symbol].update({arguments: True})
           
 class P9ModelReader(Visitor):
     """Visits tree and add constants and predicates to self.model.signature; and adds true atomics statements to model"""

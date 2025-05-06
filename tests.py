@@ -1,5 +1,18 @@
 from check import P9FreeVariablesExtractor, P9Evaluator, P9Explainer, P9ModelReader, prover9_parser
+from basic_formulas_manipulation import treeExplainerRED, treeExplainerReturning, treeExplainerReturningRED, ansi2htmlConverter
+from model import Model
 from lark import Tree
+
+def test_alternatives(alternative):
+    axioms = """all A all B all C all T all T2  ((((continuantPartOf(A,B,T)) & (continuantPartOf(B,C,T2)) & (temporalPartOf(T,T2)))) -> (continuantPartOf(A,C,T))) # label("continuant-part-of-transitive-at-a-time") ."""
+    modelAST: Tree = prover9_parser.parse(open(r"C:\Users\Francesco\Desktop\Work_Units\fol_model_checker\BFO_p9\BFO-model-from-repo.p9","r").read())       
+    axiomAST: Tree = prover9_parser.parse(axioms)
+
+    p9model = P9ModelReader()
+
+    model = p9model.read_model(modelAST)
+    out = alternative(model = model, axioms = axiomAST)
+    print(out)
 
 def tests(options):
         print("Doing some tests...")
@@ -20,6 +33,19 @@ def tests(options):
         # model_texts_axioms_evals.append((model_text, axiom_text, [True]))
 
         model_texts_axioms_evals = [
+            ("P(a1,a2).",
+            """all X True.
+            all X False.""",
+            [True, False]),
+            
+            ("P(a1,a2).P(a2,a3).P(a4,a4).",
+            "all X exists Y P(X,Y).",
+            [False]),
+
+            ("P(a1,a2).P(a2,a3).P(a3,a4).P(a4,a5).P(a5,a6).P(a6,a1).",
+            "all X exists Y P(X,Y).",
+            [True]),
+            
             ("A(x,y).A(z,y).",
             "all X exists Y A(X,Y) & B(Y).",
             [False]),
@@ -66,8 +92,6 @@ def tests(options):
                 all X all Y O(X,Y) <-> exists Z P(Z,X) & P(Z,Y) # label(O_def). 
                 """,
             [True, True, False, True, True, True]),
-
-
         ]
         # model_text = """A(v).B(v).C(x)."""
         # model_text = """A(x,y).B(y)."""
@@ -124,15 +148,23 @@ def tests(options):
             print("after-variables-extraction-axioms-signature---->", axioms_signature)
 
             evaluation = p9evaluator.evaluate(axiomAST)
-            print(f"evaluation of {axiom_text} is >>>{evaluation}<<< given model {model} \n actual evaluation is >>>{ground_eval}<<<")
-            assert evaluation == ground_eval, f"test failed, gonna print explanation... {p9explainer.explain(axiomAST)}"
+            print(f"evaluation of \n>>>{axiom_text}<<<\n is >>>{evaluation}<<< given model {model} \n actual evaluation is >>>{ground_eval}<<<")
+            if not evaluation == ground_eval:
+                treeExplainerRED(axiomAST)
+                explanation_txt = treeExplainerReturning(axiomAST)
+                explanation_html = ansi2htmlConverter.convert(treeExplainerReturningRED(axiomAST))
+                explanation_file = "explanation"
+                with open(explanation_file+".html", "w", encoding='utf-8') as fo: fo.write(explanation_html)
+                with open(explanation_file+".txt", "w", encoding='utf-8') as fo: fo.write(explanation_txt)
+                raise TypeError(f"Test failed, see printed explanation above... Also saved in file {explanation_file} (both .html and .txt)")
+            
 
         print("all the following tests where passed: ")
         for x,y,z in model_texts_axioms_evals:
             print(x)
             print(y)
             print(z)
-            print("========================")
+            print("==============================================================================")
         print("all the previous tests where passed: ")
         
         # loop_on_file(file_path=r"C:\Users\Francesco\Desktop\Work_Units\fol_model_checker\test_p9_parsing.txt")
@@ -140,5 +172,32 @@ def tests(options):
         # print(model)
 
 if __name__ == "__main__":
-    # tests(options=[])
-    tests(options=["equivalence"])
+    tests(options=[])
+    # tests(options=["equivalence"])
+    #continuantPartOf(A,B,T)) & (continuantPartOf(B,C,T2)) & (temporalPartOf
+    from tqdm import tqdm as lbar
+    def a1(model: Model, axioms):
+        """|cP|.|cP|"""
+        for abt in lbar(model.ordered_truth_table["continuantPartOf"].keys()):
+            for bct2 in model.ordered_truth_table["continuantPartOf"].keys():
+                if bct2[0] != abt[1]:
+                    continue
+                assert bct2[0] == abt[1]
+                if ((abt[2],bct2[2]) in model.ordered_truth_table["temporalPartOf"].keys() and not (abt[0],bct2[1],abt[2]) in model.ordered_truth_table["continuantPartOf"].keys()):
+                    return False
+        return True
+    def a2(model: Model, axioms):
+        """100^5 = 10^10 = 10 miliardi"""
+        for a in lbar(model.signature.constants):
+            for b in model.signature.constants:
+                for c in model.signature.constants:
+                    for t in model.signature.constants:
+                        for t2 in model.signature.constants:
+                            if ((a,b,t) in model.ordered_truth_table["continuantPartOf"].keys() and 
+                                (b,c,t2) in model.ordered_truth_table["continuantPartOf"].keys() and 
+                                (t,t2) in model.ordered_truth_table["temporalPartOf"].keys() and 
+                                not (a,c,t) in model.ordered_truth_table["continuantPartOf"].keys()):
+                                return False
+        return True
+
+    # test_alternatives(a2)
