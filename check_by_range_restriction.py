@@ -1,8 +1,8 @@
-from typing import Any
+from typing import Any, Literal
 from model import Model, P9ModelReader
 
 from lark import Token, Tree, Transformer
-from lark.visitors import Visitor, Interpreter
+from lark.visitors import Visitor, Interpreter, visit_children_decor
 
 from functools import partialmethod, partial, wraps
 from itertools import product 
@@ -11,15 +11,37 @@ from model import prover9_parser
 from join_algorithms import Relation, hash_join
 
 
-from basic_formulas_manipulation import ToReversePrenexCNF, P9FreeVariablesExtractor, ToPrenexCNF, ToUniqueVariables, BINARY_OPS, dual_quantifier, dual_op, treeExplainer, RemoveLines, ToString, get_existential_closure
+from basic_formulas_manipulation import ToReversePrenexCNF, P9FreeVariablesExtractor, ToPrenexCNF, ToUniqueVariables, BINARY_OPS, dual_quantifier, dual_op, treeExplainer, treeExplainerRED, treeExplainerGREEN, RemoveLines, ToString, get_existential_closure
+
+NEUTRAL_ELEMENT_OF_OPERATION = {
+    "conjunction": "true",
+    "disjunction": "false"
+}
+
+OPERATION_THAT_COMMUTES_WITH_QUANTIFICATION = {
+    "existential": "disjunction",
+    "universal": "conjunction",
+}
+
+NEGATION_DUAL_OF = {
+    "existential": "universal",
+    "universal": "existential",
+    "disjunction": "conjunction",
+    "conjunction": "disjunction",
+    "true": "false",
+    "false": "true",
+}
 
 EXAMPLE_AXIOMS = [
     "(exists X all Y lec(Y) -> att(X,Y)).",
     "(exists X all Y ( - P(X,Y) | Q(X,Y))).",
+    "(U(V) | (exists X all Y ( - P(X,Y) | Q(X,Y)))).",
     "(all X all Y lec(Y) -> att(X,Y)).",
     "(att(X,Y)).",
     "(- exists X (B(X) & - - - - att(X,Y))).",
 ] 
+EXAMPLE_ASTS = [RemoveLines().transform(prover9_parser.parse(example_axiom)) for example_axiom in EXAMPLE_AXIOMS]
+
 
 # class LogicFormulaTransformer(Transformer):
 #     def __init__(self, visit_tokens = True):
@@ -39,10 +61,10 @@ def equivalent_to_existential_quantifier(self, inputs, param = "universal_quanti
     quantified_variable, quantified_formula = inputs
     return Tree("negation", [Tree("existential_quantification", [quantified_variable, Tree("negation", [quantified_formula])])])
 
-def reduce_to_existential_quantifier(self, inputs) -> Tree:
+def reduce_to_existential_quantifier(self, inputs, param = "existential_quantification") -> Tree:
     """all X phi --> exists X phi \n
     inputs = [X: variable, phi: Tree]"""
-    return Tree("existential_quantification", inputs)
+    return Tree(param, inputs)
 
 def introduce_dom(self, children, param = "negation") -> Tree:
     """- atom(X) -> dom(X) """
@@ -51,11 +73,11 @@ def introduce_dom(self, children, param = "negation") -> Tree:
         if negated_formula.data == "predicate":
             predicate_symbol, *term_list = negated_formula.children
             if self.ranged_variable in [str(t) for t in term_list]:
-                return Tree("dom", [self.ranged_variable])
+                return Tree("dom", [Token("VARIABLE", self.ranged_variable)])
         if negated_formula.data == "equality_atom":
             left, right = negated_formula.children
             if self.ranged_variable in [str(left), str(right)]:
-                return Tree("dom", [self.ranged_variable])
+                return Tree("dom", [Token("VARIABLE", self.ranged_variable)])
     return Tree(param, children)
 
 
@@ -106,6 +128,7 @@ def dom_absorption(self, children, param: str) -> Tree:
     inputs = [left, right] if param = disjunction
     inputs = [negated_formula] if param = negation
     """
+    #param = "disjunction" if len(children) == 2 else param = "negation"
     if param == "disjunction":
         left, right = children
         if left.data == "dom":
@@ -128,15 +151,16 @@ def introduce_empty(self, children, param: str):
     if self.ranged_variable not in [str(t) for t in term_list]:
         return Tree("empty", [])
     return Tree(param, children)
+
 def remove_useless_quantification(self, inputs, param: str) -> Tree:
     """[quantifier] X phi --> phi, if X not in free variables of phi; otherwise keep the same \n
     inputs = [X, phi] \n
     param = quantifier: str"""
-    quantified_variable, quantified_formula = inputs
+    quantified_variable, *bound, quantified_formula = inputs
     if not str(quantified_variable) in self.freeVars.extract_free_variables_and_signature(quantified_formula)[0]:
         return quantified_formula
     else: 
-        return Tree(param, [quantified_variable, quantified_formula])
+        return Tree(param, inputs)
     
 def introduce_cond(self, inputs, param: str) -> Tree:
     """Atom -> 'cond', if ranged variable appears in Atom, else keep the same"""
@@ -205,24 +229,16 @@ def rule_serialization(self, inputs, rules: list[callable], param) -> Tree:
 
 
 class ExistentialFormulaTransformer(Transformer):
-    """Transformer to manipulate an existential formula. If the formula is not in the shape (exists X phi) an error will be raised.
+    """Interpreter to manipulate an existential formula. If the formula is not in the shape (exists X phi) an error will be raised.
         For example, (- A(x,y) and exists B(z)) -> error"""
     def __init__(self, visit_tokens = True):
         super().__init__(visit_tokens)
         self.freeVars = P9FreeVariablesExtractor()
         self.toPCNF = ToPrenexCNF()
-        self.commutes = {"existential_quantification":"disjunction", "universal_quantification":"conjunction"}
         self.CNFminiscoper = ToReversePrenexCNF()
         self.stringer = ToString()
         self.remover = RemoveLines()
 
-    def check_if_formula_is_existential(self,tree):
-        if not (len(tree.children) == 2 and tree.data == "existential_quantification"):
-            tree = self.remover.transform(tree)
-            if not (len(tree.children) == 2 and tree.data == "existential_quantification"):
-                raise TypeError(f"Formula not in shape 'exists x phi' (not even trying to remove start/lines/line syntax nodes)! Actual shape is {self.stringer.visit(tree)}")
-            else:
-                print(f"Formula was in shape 'exists x phi' plus some additional start/lines/line syntax nodes that I removed! Current shape is now {self.stringer.visit(tree)}")
 
     def check_if_quantification_is_useless(self, ranged_variable, ranged_formula):
         free_variables_in_ranged_formula = self.freeVars.extract_free_variables_and_signature(ranged_formula)[0]
@@ -230,7 +246,7 @@ class ExistentialFormulaTransformer(Transformer):
             raise TypeError(f"Formula is in shape 'exists {self.ranged_variable} phi'! However, {ranged_variable} is not a free variable in phi! Free variables of phi are {free_variables_in_ranged_formula}")
     
     def adjust_transform_repeatedly(self, tree):
-        self.check_if_formula_is_existential(tree)
+        check_if_formula_is_existential(tree)
         
         ranged_variable, ranged_formula = tree.children
         self.ranged_variable = str(ranged_variable)
@@ -254,19 +270,22 @@ class GetRange(ExistentialFormulaTransformer):
     """Get range of a formula. If the formula is not in the shape (exists X phi) an error will be raised.
         For example, (- A(x,y) and exists B(z)) -> error, (exists x all y lec(y) -> att(x,y)) -> range: exists y att(x,y). 
         If the `static` input attribute is true the formula returned is the existential closure of the range (except for the ranged variable), otherwise free variable may be present that are inherited by higher-level quantifications"""
-    def __init__(self, static: bool = False):
+    def __init__(self, static: bool = True):
         super().__init__()
         self.static = static 
     
     def adjust_transform_repeatedly(self, tree):
         finalized_tree: Tree = super().adjust_transform_repeatedly(tree)
-        if not self.static:
-            return finalized_tree
-        else: 
+        if self.static:
             return get_existential_closure(finalized_tree, exceptions={self.ranged_variable})
+        else: 
+            return finalized_tree
 
     universal_quantification = reduce_to_existential_quantifier
     existential_quantification = partialmethod(remove_useless_quantification, param = "existential_quantification")
+    universal_quantification_bounded = partialmethod(reduce_to_existential_quantifier, param = "universal_quantification_bounded")
+    existential_quantification_bounded = partialmethod(remove_useless_quantification, param = "existential_quantification_bounded")
+    
     def disjunction(self, children):
         """empty or Atom --> Atom; dom(X) or Phi --> dom(X)"""
         return rule_serialization(self, inputs = children, rules = [delete_empty_from_binary, dom_absorption], param = "disjunction")
@@ -281,12 +300,12 @@ class GetRange(ExistentialFormulaTransformer):
         #     return partialmethod(delete_empty_from_binary, param = "conjunction")(self, dom_cancellation.children)
         # else:
         #     return dom_cancelled_tree
-        return rule_serialization(self, inputs = children, rules = [dom_cancellation, partialmethod(delete_empty_from_binary, param = "conjunction")], param = "conjunction")
+        return rule_serialization(self, inputs = children, rules = [dom_cancellation, delete_empty_from_binary], param = "conjunction")
     conjunction_exc = conjunction
     
     def negation_exc(self, children):
         """- - phi --> phi; - empty --> empty; - exists y G --> exists y - G (yes, it is right this way)"""
-        return rule_serialization(self, inputs = children, rules = [double_negation_cancel, remove_negation_from_empty, commute_negation_with_existential, introduce_dom, partialmethod(dom_absorption, param = "negation")], param = "negation")
+        return rule_serialization(self, inputs = children, rules = [double_negation_cancel, remove_negation_from_empty, commute_negation_with_existential, introduce_dom, dom_absorption], param = "negation")
     negation = negation_exc
 
     predicate = partialmethod(introduce_empty, param = "predicate")
@@ -323,6 +342,35 @@ class GetCoRange(ExistentialFormulaTransformer):
     predicate = partialmethod(introduce_cond, param = "predicate")
     equality_atom = partialmethod(introduce_cond, param = "equality_atom")
 
+
+def check_if_formula_is_quantification(tree: Tree, quantification_type: Literal["existential", "universal"]) -> None: 
+    format_map = {"existential": "exists", "universal": "all"}
+    if not ((len(tree.children) == 2 and tree.data == f"{quantification_type}_quantification") or (len(tree.children) == 3 and tree.data == f"{quantification_type}_quantification_bounded")):
+        tree = RemoveLines().transform(tree)
+        if not ((len(tree.children) == 2 and tree.data == f"{quantification_type}_quantification") or (len(tree.children) == 3 and tree.data == f"{quantification_type}_quantification_bounded")):
+            raise TypeError(f"Formula not in shape '{format_map[quantification_type]} x phi' or '{format_map[quantification_type]} (x in B) phi' (not even trying to remove start/lines/line syntax nodes)! Actual shape is {ToString().visit(tree)}")
+        else:
+            print(f"Formula was in shape '{format_map[quantification_type]} x phi' plus some additional start/lines/line syntax nodes that I removed! Current shape is now {ToString().visit(tree)}")
+check_if_formula_is_existential = partial(check_if_formula_is_quantification, quantification_type = "existential")
+check_if_formula_is_universal = partial(check_if_formula_is_quantification, quantification_type = "universal")
+
+def get_range_corange(ast: Tree, quantification_type: Literal["existential", "universal"]) -> tuple[Tree, Tree]:
+    if quantification_type == "existential":
+        range = GetRange().adjust_transform_repeatedly(ast)
+        corange = GetCoRange().adjust_transform_repeatedly(ast)
+        return range, corange
+    elif quantification_type == "universal":
+        # Range(all, X, phi) = Range(exists, X, not phi)
+        # CoRange(all, X, phi) = not CoRange(exists, X, not phi) # TODO: check if this is correct
+        ranged_variable, ranged_formula = ast.children
+        existential_ast = Tree("existential_quantification", [ranged_variable, Tree("negation", [ranged_formula])])
+        existential_range = GetRange().adjust_transform_repeatedly(existential_ast)
+        existential_corange = GetCoRange().adjust_transform_repeatedly(existential_ast)
+        range = ToReversePrenexCNF().adjust_transform_repeatedly(existential_range)
+        corange = ToReversePrenexCNF().adjust_transform_repeatedly(Tree("negation", [existential_corange]))
+        return range, corange
+
+
 def get_range_corange_form(ast: Tree) -> Tree:
     range = GetRange().adjust_transform_repeatedly(ast)
     corange = GetCoRange().adjust_transform_repeatedly(ast)
@@ -333,49 +381,46 @@ def get_range_corange_form(ast: Tree) -> Tree:
         return Tree("disjunction", [corange, Tree("existential_quantification", [ranged_variable, Tree("conjunction", [range, ranged_formula])])])
 
 def get_existential_bound_form(ast: Tree) -> Tree:
-    range = GetRange().adjust_transform_repeatedly(ast)
-    corange = GetCoRange().adjust_transform_repeatedly(ast)
-    ranged_variable, ranged_formula = ast.children
+    check_if_formula_is_existential(ast)
+    ranged_variable,*bounding_formula, ranged_formula = ast.children
+    if bounding_formula != []: # formula is already in bounded form
+        return ast
+    range, corange = get_range_corange(ast, quantification_type="existential")
     if corange == Tree("false", []):
-        return Tree("existential_quantification_bounded", [ranged_variable, Tree("bound", [range]), ranged_formula])
+        return Tree("existential_quantification_bounded", [ranged_variable, range, ranged_formula])
     else:
-        return Tree("disjunction", [corange, Tree("existential_quantification_bounded", [ranged_variable, Tree("bound", [range]), ranged_formula])])
+        return Tree("disjunction", [corange, Tree("existential_quantification_bounded", [ranged_variable, range, ranged_formula])])
 
 def get_universal_bound_form(ast: Tree) -> Tree:
-
-    def check_if_formula_is_universal(tree: Tree):
-        if not (len(tree.children) == 2 and tree.data == "universal_quantification"):
-            tree = RemoveLines().transform(tree)
-            if not (len(tree.children) == 2 and tree.data == "universal_quantification"):
-                raise TypeError(f"Formula not in shape 'all x phi' (not even trying to remove start/lines/line syntax nodes)! Actual shape is {ToString().visit(tree)}")
-            else:
-                print(f"Formula was in shape 'all x phi' plus some additional start/lines/line syntax nodes that I removed! Current shape is now {ToString().visit(tree)}")
-
     check_if_formula_is_universal(ast)
-    ranged_variable, ranged_formula = ast.children
-        
-    existential_ast = Tree("existential_quantification", [ranged_variable, Tree("negation", [ranged_formula])])
-    existential_range = GetRange().adjust_transform_repeatedly(existential_ast)
-    existential_corange = GetCoRange().adjust_transform_repeatedly(existential_ast)
-    range = ToReversePrenexCNF().adjust_transform_repeatedly(Tree("negation", [existential_range]))
-    corange = ToReversePrenexCNF().adjust_transform_repeatedly(Tree("negation", [existential_corange]))
+    ranged_variable, *bounding_formula, ranged_formula = ast.children
+    if bounding_formula != []: # formula is already in bounded form
+        return ast
+    
+    range, corange = get_range_corange(ast, quantification_type="universal")
     if corange == Tree("true", []):
-        return Tree("universal_quantification_bounded", [ranged_variable, Tree("bound", [range]), ranged_formula])
+        return Tree("universal_quantification_bounded", [ranged_variable, range, ranged_formula])
     else:
-        return Tree("conjunction", [corange, Tree("universal_quantification_bounded", [ranged_variable, Tree("bound", [range]), ranged_formula])])
+        return Tree("conjunction", [corange, Tree("universal_quantification_bounded", [ranged_variable, range, ranged_formula])])
 
-class toBoundedMinifiedCNF(Transformer):
-    """Transformer to manipulate an existential formula. If the formula is not in the shape (exists X phi) an error will be raised.
+class toBoundedMinifiedCNF(Interpreter):
+    """Transformer <--TODO to manipulate an existential formula. If the formula is not in the shape (exists X phi) an error will be raised.
         For example, (- A(x,y) and exists B(z)) -> error"""
-    def __init__(self, visit_tokens = True):
-        super().__init__(visit_tokens)
+    def __init__(self):
+        super().__init__()
         self.freeVars = P9FreeVariablesExtractor()
         self.toPCNF = ToPrenexCNF()
-        self.commutes = {"existential_quantification":"disjunction", "universal_quantification":"conjunction"}
         self.CNFminiscoper = ToReversePrenexCNF()
         self.stringer = ToString()
         self.remover = RemoveLines()
         self.variablesAdjuster = ToUniqueVariables()
+
+    def __default__(self, tree):
+        #return self.visit_children(tree) <- this is the default behavior for Interpreters
+        if isinstance(tree, Tree):
+            return Tree(tree.data, self.visit_children(tree))
+        else:
+            return tree # <- to modify if tokens need to be visited
     
     def adjust_transform_repeatedly(self, tree):
         # the formula is CNF minified and corrected for variables.
@@ -383,18 +428,45 @@ class toBoundedMinifiedCNF(Transformer):
         if CNFminiscoped_ranged_formula != tree:
             print(f"Attention: the formula was not CNFminiscoped. I have CNFminiscoped it.")
 
-        adjusted_tree = self.variablesAdjuster.adjust_variables(CNFminiscoped_ranged_formula)
-        oldtree = adjusted_tree
-        newtree = self.variablesAdjuster.adjust_variables(self.transform(adjusted_tree))
+        oldtree = self.variablesAdjuster.adjust_variables(CNFminiscoped_ranged_formula)
+        # treeExplainerGREEN(oldtree)
+        newtree = self.variablesAdjuster.adjust_variables(self.visit(oldtree))
+        # treeExplainerRED(newtree)
+        # oldtree = (CNFminiscoped_ranged_formula)
+        # newtree = (self.visit(oldtree))
+        
+        # X = (self.visit(newtree))
+        # treeExplainerGREEN(X)
+        # X = (self.visit(X))
+        # treeExplainerGREEN(X)
+        # X = (self.visit(X))
+        # treeExplainerRED(X)
+        
         while newtree != oldtree:
             oldtree = newtree
-            newtree = self.variablesAdjuster.adjust_variables(self.transform(oldtree))
+            newtree = self.variablesAdjuster.adjust_variables(self.visit(oldtree))
+            # newtree = (self.visit(oldtree))
         return newtree
 
-    def universal_quantification(self, children):
-        return get_universal_bound_form(Tree("universal_quantification", children))
-    def existential_quantification(self, children):
-        return get_universal_bound_form(Tree("universal_quantification", children))
+    def quantification(self, tree, quantification_type: Literal["existential", "universal"]):
+        range, corange =  get_range_corange(tree, quantification_type)
+        ranged_variable, ranged_formula = tree.children
+        visited_ranged_formula = self.visit(ranged_formula)
+        if corange == Tree(NEUTRAL_ELEMENT_OF_OPERATION[OPERATION_THAT_COMMUTES_WITH_QUANTIFICATION[quantification_type]], []):
+            return Tree(f"{quantification_type}_quantification_bounded", [ranged_variable, range, visited_ranged_formula])
+        else:
+            visited_corange = self.visit(corange)
+            return Tree(OPERATION_THAT_COMMUTES_WITH_QUANTIFICATION[quantification_type], [visited_corange, Tree(f"{quantification_type}_quantification_bounded", [ranged_variable, range, visited_ranged_formula])])
+    existential_quantification = partialmethod(quantification, quantification_type = "existential")
+    universal_quantification = partialmethod(quantification, quantification_type = "universal")
+    
+    def existential_quantification_bounded(self, tree):
+        var, bound, formula = tree.children
+        return Tree(tree.data, [var, bound, self.visit(formula)])
+    universal_quantification_bounded = existential_quantification_bounded
+
+
+
 
 
 class evaluateQuantifierBound(Transformer):
@@ -585,6 +657,21 @@ def test_bond_evaluation():
     treeExplainer(formula)
     x = evBound.transform(formula)
     print(x)
+
+def test_range():
+    assert GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0]) == Tree("existential_quantification", [Token('VARIABLE', 'Y'), Tree("predicate", [Token("PREDICATE_SYMBOL","att"), Token("VARIABLE","X"), Token("VARIABLE","Y")])]), GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0])
+    assert GetRange().adjust_transform_repeatedly(GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0])) == Tree("existential_quantification", [Token('VARIABLE', 'X'), Tree("predicate", [Token("PREDICATE_SYMBOL","att"), Token("VARIABLE","X"), Token("VARIABLE","Y")])]), GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0])
+    assert toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[0]) == Tree('disjunction', [Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')]), Tree('negation', [Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')])])]), Tree('existential_quantification_bounded', [Token('VARIABLE', 'X'), Tree('existential_quantification', [Token('VARIABLE', 'Y1'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y1')])]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y2'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y2')]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y2')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y2')])])])])])
+    
+    assert toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[1]) == Tree('existential_quantification_bounded', [Token('VARIABLE', 'X2'), Tree('dom', [Token('VARIABLE', 'X2')]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('existential_quantification', ['X', Tree('predicate', [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Y')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'Q'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Y')])])])])
+    
+    assert toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[2]) == Tree('disjunction', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'U'), Token('VARIABLE', 'V')]), Tree('existential_quantification_bounded', [Token('VARIABLE', 'X2'), Tree('dom', [Token('VARIABLE', 'X2')]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('existential_quantification', ['X', Tree('predicate', [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Y')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'Q'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Y')])])])])])
+    
+    treeExplainerGREEN(EXAMPLE_ASTS[3])
+    treeExplainerRED(toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[3]))
+
+test_range()
+exit()
 
 def test_range_corange_transform():
     asts = [RemoveLines().transform(prover9_parser.parse(example_axiom)) for example_axiom in EXAMPLE_AXIOMS]
