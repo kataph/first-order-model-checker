@@ -9,7 +9,7 @@ lines: line+
 
 line: (sentence | atomicsentence) label? "."
 
-?label: "#" "label(" LABEL_TEXT ")"
+label: "#" "label(" LABEL_TEXT ")"
                       
 ?sentence: "exists" VARIABLE entailterm -> existential_quantification
           | "all" VARIABLE entailterm -> universal_quantification

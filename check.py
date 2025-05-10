@@ -5,12 +5,14 @@ from tqdm import tqdm
 from lark import Lark, Tree, Token, Transformer
 from lark.visitors import Visitor, Interpreter
 
-from basic_formulas_manipulation import treeExplainer, P9FreeVariablesExtractor
+from basic_formulas_manipulation import RemoveLabels, RemoveLines, treeExplainerRED, treeExplainerReturning, P9FreeVariablesExtractor
+from check_by_range_restriction import evaluateQuantifierBound, toBoundedMinifiedCNF
 from check_modulo_signature_equivalence import find_equivalent, intersects_equivalence_classes
 
+from join_algorithms import Relation
 from model import prover9_parser, Signature, Model, P9ModelReader
 
-POSSIBLE_OPTIONS = {"equivalence"}
+POSSIBLE_OPTIONS = {"equivalence", "range"}
 
 # text = '(all X (cat(X) <-> (ed(X) & (exists T1 (pre(X,T1))) & all T (pre(X,T) -> tat(X,T)))))'
 # text = '(A(c) & B(y))'
@@ -82,6 +84,9 @@ class P9Evaluator(Interpreter):
             self.equivalences = {frozenset({"="}):[set(model.signature.constants)]} # Equality is added since the way the models are written every costant is '='-equivalent
             for predicate in self.model.signature.predicates: 
                 self.equivalences.update({frozenset({predicate}): find_equivalent(self.model.ordered_truth_table[predicate], self.model)})
+        if "range" in options:
+            self.boundEvaluator = evaluateQuantifierBound(ranged_variable="", model=model)
+            self.tree_to_bound_map = {}
 
     def get_equivalent_representatives(self, tree, substitutions: dict[str,str]):
         free_variables, axiom_signature = self.p9extractor.extract_free_variables_and_signature(tree)
@@ -117,12 +122,6 @@ class P9Evaluator(Interpreter):
         return self.visit(tree)
     # this way I ensure I can visit with some input data
     def visit_with_memory(self, tree, additional_data = {}):
-            # for child in tree.children:
-            #     if not isinstance(child,Token):
-            #         print(22222222222222222222222222222)
-            #         print(child)
-            #         child.additional_data = additional_data
-            #         print(vars(child))
             tree.additional_data = additional_data
 
             return self.visit(tree)
@@ -135,7 +134,7 @@ class P9Evaluator(Interpreter):
     def pass_car(self, tree: Tree):
         return self.visit_children(tree)[0]
     def pass_empty_substitutions_and_set_flag(self, tree: Tree):
-        assert (children_len := len(tree.children)) == 1 or (children_len == 2 and isinstance(tree.children[-1],Token)), f"A line should only have one child or two with the second being a label token. Is something wring with the grammar? Tree is {tree}"
+        assert (children_len := len(tree.children)) == 1 or (children_len == 2 and isinstance(tree.children[-1],Token)), f"A line should only have one child or two with the second being a label token. Is something wring with the grammar? Tree is {tree} and is also in red {treeExplainerRED(tree)}"
         self.is_a_tqdm_running = False
         if children_len == 1:
             (child,) = tree.children
@@ -148,14 +147,36 @@ class P9Evaluator(Interpreter):
     line = pass_empty_substitutions_and_set_flag
 
     def quantification(self, tree: Tree, quantification_type: Literal["universal", "existential"]) -> bool:
-        quantified_variable, quantified_formula = tree.children
+        quantified_variable, *bounding_formula_list, quantified_formula = tree.children
+        if bounding_formula_list == []:
+            bounded = False
+        else:
+            if not "range" in self.options: raise TypeError("Received a bounded quantifier but range is not an option")
+            bounded = True
+            bounding_formula = bounding_formula_list[0]
+            if bounding_formula in self.tree_to_bound_map:
+                bound = self.tree_to_bound_map[bounding_formula]
+            else:
+                self.boundEvaluator.ranged_variable = quantified_variable
+                bound_relation: Relation = self.boundEvaluator.transform(bounding_formula)
+                if not len(bound_relation.tuple_header) == 1 and bound_relation.tuple_header[0] == quantified_variable:
+                    raise TypeError(f"Bounded formula evaluation returned an unexpected result: {bound_relation}")
+                bound = {t[0] for t in bound_relation.tuple_set} # de-tuple the singleton tuples
+                self.tree_to_bound_map.update({bounding_formula:bound})
+                
         substitutions = tree.additional_data.copy()
         if quantified_variable.value in substitutions: raise AssertionError(f"Found same variable symbol doubly quantified! It should not happen. Variable is {quantified_variable} for {quantified_formula}")
         
         # this part takes care of the execution of eventual strategies
         constants_to_check = self.model.signature.constants
         if "equivalence" in self.options:
-            constants_to_check = self.get_equivalent_representatives(tree, substitutions)
+            constants_to_check = self.get_equivalent_representatives(tree, substitutions)            
+        if bounded:
+            constants_to_check = set(constants_to_check).intersection(bound)
+            
+        # case that there are no constants to check
+        if len(constants_to_check) == 0:
+            return quantification_type == "universal"
 
         # this part decides if a loading bar should be activated 
         if not self.is_a_tqdm_running:
@@ -174,6 +195,7 @@ class P9Evaluator(Interpreter):
                 return self.quantification_type_to_inner_truth_value[quantification_type]
             attempted_subsss.append(substitutions.copy())
         tree.explanation = f"{truth_value} with {attempted_subsss}"
+        
         if isinstance(iterator,tqdm): iterator.clear()
         return not self.quantification_type_to_inner_truth_value[quantification_type]
     
@@ -181,6 +203,9 @@ class P9Evaluator(Interpreter):
         return self.quantification(tree, "universal")
     def existential_quantification(self, tree: Tree):
         return self.quantification(tree, "existential")
+    
+    existential_quantification_bounded = existential_quantification
+    universal_quantification_bounded = universal_quantification
 
 
     def entails(self, tree: Tree): 
@@ -281,6 +306,8 @@ def read_model_file(model_file: str) -> Model:
         raise TypeError(f"Equality was found in the model. It should not be there, and instead all constants should be assumed to be different")
 
     print(f"...read model file. The model has {len(model.signature.constants)} constants and {len(model.signature.predicates)} predicates")
+    print(f"The model ordered table is >>> {model.ordered_truth_table}")
+    print(f"The model truth table is >>> {model.truth_table}")
     return model
 
 # model = read_model_file("model.p9")
@@ -303,6 +330,7 @@ def check_lines(lines: list[str], model: Model, options: list[str]):
     p9variables = P9FreeVariablesExtractor()
     p9evaluator = P9Evaluator(model, options)
     p9explainer = P9Explainer()
+    p9remover = RemoveLabels()
     
     axioms_true = 0
     axioms_false = 0
@@ -315,7 +343,7 @@ def check_lines(lines: list[str], model: Model, options: list[str]):
         if "set(prolog_style_variables)" in no_comment_line: #ignore setting options
             continue
         axiom_text = no_comment_line
-        axiomsAST: Tree = prover9_parser.parse(axiom_text)
+        axiomsAST: Tree = p9remover.transform((prover9_parser.parse(axiom_text)))
         free_variables, axiom_signature = p9variables.extract_free_variables_and_signature(axiomsAST)
         if "=" in model.signature.predicates:
             raise TypeError(f"Equality was found in the model. It should not be there, and instead all constants should be assumed to be different")
@@ -331,6 +359,8 @@ def check_lines(lines: list[str], model: Model, options: list[str]):
 
 
         print(f"evaluating >>>{axiom_text}<<< against given model...")
+        if "range" in options:
+            axiomsAST = toBoundedMinifiedCNF().adjust_transform_repeatedly(axiomsAST)
         evaluation = p9evaluator.evaluate(axiomsAST)
         
         print(f"...evaluation result is >>>{evaluation}<<<")
@@ -338,14 +368,16 @@ def check_lines(lines: list[str], model: Model, options: list[str]):
             axioms_false += 1
             print(f"Evaluation of axiom >>>{axiom_text}<<< is False! Generating explanation...")
             #p9explainer.explain(axiomsAST)
-            treeExplainer(axiomsAST)
-            print(f"Above should have appeared an explanation of why >>>{axiom_text}<<< is False")
+            treeExplainerRED(axiomsAST)
+            with open("explanation.txt", "w", encoding="utf-8") as fo:
+                fo.write(treeExplainerReturning(axiomsAST))
+            print(f"Above should have appeared an explanation of why >>>{axiom_text}<<< is False. See also the local file 'explanation.txt' in case the generated explanation does not fit the screen")
             break #TODO
         else:
             axioms_true += 1
     print(f"Axioms analysis ended. Found {axioms_true}/{axioms_true+axioms_false} true axioms and {axioms_false}/{axioms_true+axioms_false} false axioms.")
     if axioms_false > 0:
-        print(f"Some axioms were evaluated as false. Check printed output for information on which they were and why they were evaluated as false.")
+        print(f"Some axioms were evaluated as false. Check printed output for information on which they were and why they were evaluated as false. See also the local file 'explanation.txt' in case the generated explanation does not fit the screen.")
 
 def check_model_against_axioms(model_file: str, axioms_file: str, options: list[str])->None:
     start1 = time.time()
@@ -406,16 +438,60 @@ def test_signature_extraction():
     assert p9sig.transform(prover9_parser.parse("((all X exists Y P(X,Y) & X=Y) | (exists X exists Z all U all V (E(X,y,Z) & R(U,V)))) .")) == {'=', 'P', 'E', 'R'}; print("""p9sig.transform(prover9_parser.parse("((all X exists Y P(X,Y) & X=Y) | (exists X exists Z all U all V (E(X,y,Z) & R(U,V)))) .")) == {'=', 'P', 'E', 'R'}""")
     assert p9sig.transform(prover9_parser.parse("all X all Y P(X) & Q(Y) .")) == {'P', 'Q'}; print("""p9sig.transform(prover9_parser.parse("all X all Y P(X) & Q(Y) .")) == {'P', 'Q'}""")
 
-# test_signature_extraction()
+
+def benchmark():
+    axioms = """(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T)).
+        (cP(x,z,t)).
+        (all X (cP(x,z,t) | False)).
+        (True)."""
+    axioms = axioms.split("\n")
+    model_txt = """cP(x,y,t).cP(y,z,tau).tP(t,tau).cP(x,z,t).
+
+        C(x).C(y).C(z).
+        T(t).T(tau).
+        cP(x,x,t).cP(x,x,tau).
+        cP(y,y,t).cP(y,y,tau).
+        cP(z,z,t).cP(z,z,tau).
+        tP(t,t).
+        tP(tau,tau).
+
+        cP(y,z,t).
+
+        P(p)."""
+    
+    def add_counter_with_options(func):
+        def wrapper(*args, **kwargs):
+            s = time.perf_counter()
+            out = func(*args, **kwargs)
+            e = time.perf_counter()
+            return f"Execution time of {func.__name__} is {e-s}, if with options = {kwargs["options"]}"
+        return wrapper
+    for i in range(10):
+        model_txt += (".".join([f"P({i*10+j})" for j in range(5)]) + ".")
+        model = P9ModelReader().read_model(prover9_parser.parse(model_txt))
+        print(f"Working with model with constants: {model.signature.constants}")
+        #o1 = add_counter_with_options(check_lines)(axioms, model, options = []) <- this explodes soon
+        o2 = add_counter_with_options(check_lines)(axioms, model, options = ["equivalence"])
+        o3 = add_counter_with_options(check_lines)(axioms, model, options = ["range"])
+        o4 = add_counter_with_options(check_lines)(axioms, model, options = ["equivalence","range"])
+        print("\n",o2,"\n",o3,"\n",o4) #print("\n",o1,"\n",o2,"\n",o3,"\n",o4)
+    for i in range(10):
+        model_txt += f"cP(x{i},y{i},t{i}).cP(y{i},z{i},tau{i}).tP(t{i},tau{i}).cP(x{i},z{i},t{i})."
+        model = P9ModelReader().read_model(prover9_parser.parse(model_txt))
+        print(f"Working with model with constants: {model.signature.constants}")
+        #o1 = add_counter_with_options(check_lines)(axioms, model, options = []) <- this explodes soon
+        # o2 = add_counter_with_options(check_lines)(axioms, model, options = ["equivalence"]) <- this also explodes in this case
+        o3 = add_counter_with_options(check_lines)(axioms, model, options = ["range"])
+        o4 = add_counter_with_options(check_lines)(axioms, model, options = ["equivalence","range"])
+        print("\n",o3,"\n",o4) #print("\n",o1,"\n",o2,"\n",o3,"\n",o4)
+
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(prog='FOL model checker',description='Simply supply the location of a file containing a model and of a file containing a theory')
     parser.add_argument('-m', '--model_file', type = str, help="Model file location")
     parser.add_argument('-a', '--axioms_file', type = str, help="Axiom file location")
-    parser.add_argument('-o', '--options', type = str, nargs = "+", default = [], help="Options. Currently only 'equivalence' is supported")
+    parser.add_argument('-o', '--options', type = str, nargs = "+", default = [], help="Options. Currently only 'equivalence' and 'range' are supported")
     args = parser.parse_args()
     print(args)
     check_model_against_axioms(args.model_file, args.axioms_file, args.options)
-
-    

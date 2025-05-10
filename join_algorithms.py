@@ -21,6 +21,10 @@ def control_if_join_is_proper(header1, header2, keys):
 
     if not (all(key in header1 for key in keys) and all(key in header2 for key in keys)):
         raise TypeError(f"I am considering only proper joins where all keys are shared by both relation")
+    
+    if (set(header1) == set(keys) or set(header2) == keys):
+        # raise TypeError(f"I am considering only proper joins where the columns of a relation are not subset of the other")
+        print(f"WARNING: >>>>A join is being execute, where the columns of a relation are subset of the other: {header1} and {header2}. A simple intersection should be probably executed instead<<<<")
 
     key_indices1 = [header1.index(key) for key in keys]
     key_indices2 = [header2.index(key) for key in keys]
@@ -58,6 +62,24 @@ def simple_nested_loops_join(r1: set[tuple], key_idx1, r2:set[tuple], key_idx2) 
             if t1[key_idx1] == t2[key_idx2]:
                 ro.add((t1[0], t1[1], t2[1]))
     return ro
+
+def intersection_join(r1: Relation, r2: Relation):
+    """The special case that the variables of one relation are subset of the variables of the other: a simple intersection is executed"""
+    if set(r1.tuple_header).issubset(set(r2.tuple_header)):
+        small_rel = r1
+        big_rel = r2
+    elif set(r2.tuple_header).issubset(set(r1.tuple_header)):
+        small_rel = r2
+        big_rel = r1
+    else:
+        raise TypeError("the variables of one relation are not subset of the variables of the other. This function should not be called in this case!")
+    
+    join_relation = Relation(tuple_header=big_rel.tuple_header, tuple_set=set())
+    deduped_indices_of_big_that_are_in_small = [big_rel.tuple_header.index(var) for var in small_rel.tuple_header]
+    for t in big_rel.tuple_set:
+        if tuple(t[i] for i in deduped_indices_of_big_that_are_in_small) in small_rel.tuple_set:
+            join_relation.tuple_set.add(t)
+    return join_relation
 
 def nested_loops_join(r1: Relation, r2: Relation, keys: tuple[str]): # <-- more than 10 times slower than simple version...
     header1 = r1.tuple_header
@@ -217,7 +239,35 @@ def simple_hash_join(r1, key_idx1, r2, key_idx2):
                 hro.add((t1[0],t1[1],t2[1]))
     return hro
 
+def add_counter(func):
+    def wrapper(*args, **kwargs):
+        s = perf_counter()
+        out = func(*args, **kwargs)
+        e = perf_counter()
+        print(f"Execution time of {func.__name__}: {e-s}")
+        return out
+    return wrapper
 
+def check_and_benchmark_intersection_join():
+    in_out_relations = [
+        (Relation(("X"),{(1,), (2,), (3,)}),Relation(("X", "Y"),{(1,2), (2,3), (3,4), (5,6), (7,8)}),Relation(("X", "Y"),{(1,2), (2,3), (3,4)})),
+        (Relation(("X", "Y"),{(1,1), (2,3), (3,2)}),Relation(("X", "Z", "Y"),{(1,9,1), (2,8,3), (2,3,4)}),Relation(("X", "Z", "Y"),{(1,9,1), (2,8,3)})),
+        ]
+    for r1, r2, join in in_out_relations:
+        assert join.tuple_set == intersection_join(r1,r2).tuple_set
+    
+    for len1, len2, size in [(100,150,200),(1000,1500,200),(2000,3000,400),(4000,6000,500), (150,100,200),(1500,1000,200),(3000,2000,400),(6000,4000,500)]:
+        print(len1, len2, size)
+        r1 = Relation(("X"),{(random.randint(1,size),) for x in range(len1)})
+        r2 = Relation(("X", "Y"), {(random.randint(1,size),random.randint(1,size)) for x in range(len2)})
+        print("len(r1): ", len(r1.tuple_set), "len1: ", len1) 
+        print("len(r2): ", len(r2.tuple_set), "len2: ", len2) 
+        join_rel = add_counter(intersection_join)(r1,r2)
+        print(f"Join = {join_rel}")
+        print(f"Join length = {len(join_rel.tuple_set)}")
+
+    print("All good for intersection join")
+    
 def check_join_algorithms():
     test_tuple_sets = [
     (   
@@ -362,14 +412,7 @@ def check_join_algorithms():
         print("ok")
     
 
-def add_counter(func):
-    def wrapper(*args, **kwargs):
-        s = perf_counter()
-        out = func(*args, **kwargs)
-        e = perf_counter()
-        print(f"Execution time of {func.__name__}: {e-s}")
-        return out
-    return wrapper
+
 
 def benchmark_join_algorithms():
     # It shoul show that hash and sort are similar with hash slightly faster, nested is much slower. Also simple versions are about 4x to 10x faster.

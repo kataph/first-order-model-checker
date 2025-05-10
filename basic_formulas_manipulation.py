@@ -1,12 +1,18 @@
 from functools import partialmethod
+import re
 
 from lark import Tree, Token, Transformer
-from lark.visitors import Visitor, Interpreter
+from lark.visitors import Visitor, Interpreter, Discard
 
 from model import prover9_parser, Signature, Model, P9ModelReader
 
 from PrettyPrint import PrettyPrintTree
 import ansi2html
+
+import logging
+my_logger = logging.getLogger("my_logger")
+logging.basicConfig(level=logging.INFO)
+
 
 BINARY_OPS = [
     "conjunction",
@@ -46,6 +52,7 @@ from colorama import Back
 treeExplainer = PrettyPrintTree(getChildren, getExplanation, color="")
 treeExplainerRED = PrettyPrintTree(getChildren, getExplanation, color=Back.RED)
 treeExplainerGREEN = PrettyPrintTree(getChildren, getExplanation, color=Back.GREEN)
+treeExplainerYELLOW = PrettyPrintTree(getChildren, getExplanation, color=Back.YELLOW)
 treeExplainerReturning = PrettyPrintTree(
     getChildren, getExplanation, return_instead_of_print=True, color=""
 )
@@ -72,31 +79,130 @@ text0 = (
 #             False    . '''
 # text = 'all X A(X,Y) .'
 text6 = "all X A(X,Y,c2) ."
-text5 = "all X A(X,Y,c2) & P(X,Z,c) ."
 text4 = "all X A(X,Y) & exists Z P(Z) ."
+text5 = "all X A(X,Y,c2) & P(X,Z,c) ."
 text3 = "all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l)."
 text2 = "all X A(X,Y,c2) | - exists Z P(X,Z,c) ."
 text2pre = "all X all Z A(X,Y,c2) | - P(X,Z,c) ."
 text1 = "all X all Y all Z all T all T2 A(X,Y,T) & A(Y,Z,T2) & B(T,T2) -> A(X,Z,T) ."
+text7 = "all A all B all C all T all T2  ((((properContinuantPartOf(A,B,T)) & (properContinuantPartOf(B,C,T2)) & (temporalPartOf(T,T2)))) -> (properContinuantPartOf(A,C,T))) # label(\"proper-continuant-part-of-transitive-at-a-time\")."
+text7 = "all A (B(A)) # label(\"proper-continuant-part-of-transitive-at-a-time\")."
 
 
-ast0 = prover9_parser.parse(text0)
-ast1 = prover9_parser.parse(text1)
-ast2 = prover9_parser.parse(text2)
-ast3 = prover9_parser.parse(text3)
-ast4 = prover9_parser.parse(text4)
-ast5 = prover9_parser.parse(text5)
+
+# ast = prover9_parser.parse(text7)
 # treeExplainer(ast)
-# s()
+# # treeExplainer(RemoveLines().transform(ast))
+# exit()
 
 
+
+class ToString(Interpreter):
+    """Transform a tree into a formatted string"""
+
+    def print_binary_op(self, tree, op: str):
+        left, right = tree.children
+        yes_left_par = left.data not in ["predicate", "equality_atom"]
+        yes_right_par = right.data not in ["predicate", "equality_atom"]
+        return (
+            "(" * yes_left_par
+            + self.visit(left)
+            + ")" * yes_left_par
+            + f" {op} "
+            + "(" * yes_right_par
+            + self.visit(right)
+            + ")" * yes_right_par
+        )
+
+    entailment = partialmethod(print_binary_op, op="->")
+    reverse_entailment = partialmethod(print_binary_op, op="<-")
+    equivalence_entailment = partialmethod(print_binary_op, op="<->")
+    disjunction = partialmethod(print_binary_op, op="|")
+    conjunction = partialmethod(print_binary_op, op="&")
+    entailment_exc = entailment
+    equivalence_entailment_exc = reverse_entailment
+    equivalence_entailment_exc = equivalence_entailment
+    disjunction_exc = disjunction
+    conjunction_exc = conjunction
+
+    def negation(self, tree):
+        negated_formula = tree.children[0]
+        return f"-({self.visit(negated_formula)})"
+
+    negation_exc = negation
+
+    def print_quantification_op(self, tree, op: str):
+        variable, quantified_formula = tree.children
+        return f"{op} {variable} ({self.visit(quantified_formula)})"
+
+    universal_quantification = partialmethod(print_quantification_op, op="all")
+    existential_quantification = partialmethod(print_quantification_op, op="exists")
+
+    def print_bounded_quantification_op(self, tree, op: str):
+        variable, bounding_formula, quantified_formula = tree.children
+        return f"{op} ({variable} ∈ {{{variable} | {self.visit(bounding_formula)}}}) ({self.visit(quantified_formula)})"
+
+    universal_quantification_bounded = partialmethod(
+        print_bounded_quantification_op, op="all"
+    )
+    existential_quantification_bounded = partialmethod(
+        print_bounded_quantification_op, op="exists"
+    )
+
+    def equality_atom(self, tree):
+        left, right = tree.children
+        return f"{str(left)} = {str(right)}"
+
+    def predicate(self, tree):
+        predicate_symbol, *term_list = tree.children
+        return f"{predicate_symbol}({",".join([term.value if hasattr(term, "value") else str(term) for term in term_list])})"
+
+    def VARIABLE(self, tree):
+        return str(tree)
+
+    def true(self, tree):
+        return "True"
+
+    def false(self, tree):
+        return "False"
+
+    def empty(self, tree):
+        return "empty"
+    def cond(self, tree):
+        return "cond"
+    def dom(self, tree):
+        return f"dom({tree.children[0]})"
+
+    def pass_par_rule(self, tree, par: str):
+        return Tree(Token("RULE", par), self.visit_children(tree))
+
+    def pass_par(self, tree, par: str):
+        return Tree(par, self.visit_children(tree))
+
+    def start(self, tree):
+        return self.visit(tree.children[0])
+
+    def lines(self, tree):
+        line_s: list = tree.children
+        visited_line_s: list[str] = [self.visit(line) for line in line_s]
+        return "\n".join(visited_line_s)
+
+    def line(self, tree):
+        formula = tree.children[0]
+        return f"({self.visit(formula)})."
+    
 class P9FreeVariablesExtractor(Transformer):
     """Extract all free variables and predicates from a formula. E.g. all X A(X,Y,c2) | - exists Z P(X,Z,c) .  ---> {X}; {A:3, P:3, c:0, c2:0}
-    Can be used repeatedly on different formulas."""
+    Can be used repeatedly on different formulas.
+    Calling transform returns just the variables, calling extract_free_variables_and_signature returns the variables and the signature"""
 
     def __init__(self, visit_tokens=True):
         super().__init__(visit_tokens)
         self.axioms_signature = Signature()
+        
+    # def transform(self, tree):
+    #     # print(f"gonna transform {tree}{treeExplainerGREEN(tree)}")
+    #     return super().transform(tree)
 
     def extract_free_variables_and_signature(
         self, tree: Tree
@@ -137,7 +243,6 @@ class P9FreeVariablesExtractor(Transformer):
                     raise AssertionError(
                         f"Found non-token {token} in predicate {predicate_symbol} (and the non-token is not auxillary data about polarity). This should not happen"
                     )
-                    # print(f"Attention: found non-token {token} in predicate {predicate_symbol}. Ensure this makes sense (if it is additional data about polarity it is intended)")
             else:
                 if token.type == "CONSTANT":
                     self.axioms_signature.add_constant(token)
@@ -149,15 +254,16 @@ class P9FreeVariablesExtractor(Transformer):
     def quantification(self, items, thereIsBound=False):
         if thereIsBound:
             quantified_variable, bound, variables_from_inner_formula = items
+            quantified_variables = [quantified_variable]
         else:
-            quantified_variable, variables_from_inner_formula = items
-        if not isinstance(quantified_variable, Token) or not isinstance(
+            *quantified_variables, variables_from_inner_formula = items
+        if not all(isinstance(quantified_variable, (Token, str)) for quantified_variable in quantified_variables) or not isinstance(
             variables_from_inner_formula, set
         ):
             raise TypeError(
-                f"Something wrong with returned variables: {quantified_variable} or {variables_from_inner_formula}"
+                f"Something wrong with returned variables: either the list of quantified variables(={quantified_variables}) or the variables from the inner formula (={variables_from_inner_formula})"
             )
-        difference = variables_from_inner_formula.difference({str(quantified_variable)})
+        difference = variables_from_inner_formula.difference({str(quantified_variable) for quantified_variable in quantified_variables})
         return difference
 
     existential_quantification = quantification
@@ -205,7 +311,6 @@ class P9FreeVariablesExtractor(Transformer):
 
     label = lambda self, items: None
 
-
 class AssociativeFlattener(Transformer):
     """flattens associative/commutative operations in a tree. E.g. (A & (B & C)) will become (A & B & C). all X all Y phi(X,Y) will become all {X Y} phi(X,Y). Also double negation will be removed"""
 
@@ -221,7 +326,6 @@ class AssociativeFlattener(Transformer):
         return newtree
 
     def flatten_and_or(self, items, op: str):
-        print(items)
         new_items = []
         for item in items:
             if item.data in [op, op + "_exc"]:
@@ -265,6 +369,62 @@ class AssociativeFlattener(Transformer):
 # flatAst = flattener.transform_repeatedly(axiomAST)
 # treeExplainer(axiomAST)
 # treeExplainer(flatAst)
+# quit()
+def test_free_variables_extraction():
+    extractor = P9FreeVariablesExtractor()
+    axiom_to_free_vars = [("(all Y p(X,Y)).", {"X"}),
+                          ("(all Z all W l(X,Y,Z,W)).", {"X", "Y"})]
+    for axiom, free_vars in axiom_to_free_vars:
+        ast = prover9_parser.parse(axiom)
+        assert free_vars == (actual:=extractor.transform(ast)), f"expected {free_vars}, got {actual}"
+        assert free_vars == (actual:=extractor.transform(AssociativeFlattener().transform_repeatedly(ast))), f"expected {free_vars}, got {actual}"
+    print("All good with free vars extraction")
+
+class ReverseAssociativeFlattener(Transformer):
+    """Inverts the operations of the associative flattener"""
+
+    def __init__(self, visit_tokens=False):
+        super().__init__(visit_tokens)
+
+    def transform_repeatedly(self, tree):
+        oldtree = tree
+        newtree = self.transform(oldtree)
+        while newtree != oldtree:
+            oldtree = newtree
+            newtree = self.transform(newtree)
+        return newtree
+
+    def de_flatten_and_or(self, items, op: str):
+        if len(items) > 2:
+            return Tree(op, [items[0], Tree(op, items[1:])])
+        return Tree(op, items)
+    conjunction = conjunction_exc = partialmethod(de_flatten_and_or, op="conjunction")
+    disjunction = disjunction_exc = partialmethod(de_flatten_and_or, op="disjunction")
+
+    def quantification(self, items, op: str):
+        *variables, inner_formula = items
+        #variables = sorted(variables) <- changes previous results too much
+        if len(variables) > 1:
+            return Tree(op, [variables[0], Tree(op, variables[1:] + [inner_formula])])
+            
+        return Tree(op, items)
+
+    universal_quantification = partialmethod(
+        quantification, op="universal_quantification"
+    )
+    existential_quantification = partialmethod(
+        quantification, op="existential_quantification"
+    )
+
+
+# axiom_text = """exists Y exists Z all X all U all UU exists T exists TT ((A(X) | -U(X) | K(X,Z)) & (B(X,Y) | -V(X,Y,Z)) & (C(Z)))."""
+# axiomAST = prover9_parser.parse(axiom_text)
+# flatAst = AssociativeFlattener().transform_repeatedly(axiomAST)
+# reverseflatAst = ReverseAssociativeFlattener().transform_repeatedly(axiomAST)
+# treeExplainer(axiomAST)
+# treeExplainer(flatAst)
+# treeExplainer(reverseflatAst)
+# assert reverseflatAst == axiomAST
 # quit()
 
 
@@ -393,10 +553,11 @@ class ReplaceVariable(Interpreter):
     def transform(self, tree):
         return self.visit(tree)
     
-    def VARIABLE(self, value):
-        return Token(
-            type_="VARIABLE", value=value.replace(self.replaced, self.replacing)
-        )
+    def VARIABLE(self, token):
+        assert isinstance(token, Token)
+        if token.value == self.replaced:
+            return Token("VARIABLE", self.replacing) # value.replace(self.replaced, self.replacing) <- this is wrong because it replaces substrings within variable names
+        return token 
     
     def quantification(self, tree, quantification_type):
         quantified_variable, *bounding_formula_list, inner_formula = tree.children
@@ -428,7 +589,7 @@ class ReplaceVariable(Interpreter):
 # exit()
 
 class ToUniqueVariables(Transformer):
-    """Each quantified variable will have a unique name"""
+    """Each quantified variable will have a unique name. Also redundant quantifications will be removed. Not to be used with flattened formulas!"""
 
     def __init__(self, visit_tokens=True):
         super().__init__(visit_tokens)
@@ -442,8 +603,19 @@ class ToUniqueVariables(Transformer):
 
     def quantification(self, items, quantification_type):
         quantified_variable, *bounding_formula_list, inner_formula = items
+        if str(quantified_variable) not in P9FreeVariablesExtractor().transform(inner_formula):
+            return inner_formula
         if str(quantified_variable) in self.quantified_variables:
-            new_name = str(quantified_variable) + str(len(self.quantified_variables))
+            match = re.match(r"([a-zA-Z]+)(.*?)(\d+)", str(quantified_variable))
+            if not match: 
+                root = str(quantified_variable)
+                new_number = 1
+            else:
+                root, _, number = match.groups()
+                new_number = int(number) + 1
+            while root+str(new_number) in self.quantified_variables:
+                new_number += 1
+            new_name = root+str(new_number) #str(quantified_variable) + str(len(self.quantified_variables))
             self.quantified_variables.add(new_name)
             rp = ReplaceVariable(str(quantified_variable), new_name)
             replacing_inner_formula = rp.transform(inner_formula)
@@ -472,11 +644,20 @@ class ToUniqueVariables(Transformer):
     )
 
 
-# unique = ToUniqueVariables()
-# treeExplainer(ast0)
-# treeExplainer(unique.adjust_variables(ast0))
-# s()
-
+def test_variables_adjuster():
+    unique = ToUniqueVariables()
+    toString = ToString()
+    in_outs = [("((all X A(X,Y)) & (exists X P(X)) & (exists X V(X))).", "((all X A(X,Y)) & (exists X1 P(X1)) & (exists X2 V(X2)))."),
+               ("((all X A(X,Y)) & (exists X P(X)) & (exists X (V(X) & all X B(X)))).", "((all X A(X,Y)) & (exists X1 P(X1)) & (exists X3 (V(X3) & all X2 B(X2))))."),
+               ("all A all B all C all T all T2  ((((properContinuantPartOf(A,B,T)) & (properContinuantPartOf(B,C,T2)) & (temporalPartOf(T,T2)))) -> (properContinuantPartOf(A,C,T))) # label(\"proper-continuant-part-of-transitive-at-a-time\").", 
+                "all A all B all C all T all T2  ((((properContinuantPartOf(A,B,T)) & (properContinuantPartOf(B,C,T2)) & (temporalPartOf(T,T2)))) -> (properContinuantPartOf(A,C,T))) # label(\"proper-continuant-part-of-transitive-at-a-time\").")
+               ]
+    for inp, out in in_outs:
+        base = prover9_parser.parse(inp)
+        calc = unique.adjust_variables(base)
+        ground = prover9_parser.parse(out)
+        assert calc == ground, f"From black/white and string should have got green, got read instead {base, treeExplainer(base), treeExplainerGREEN(ground), treeExplainerRED(calc)}"
+    print("All good for variables adjuster")
 
 class ToPrenex(Transformer):
     """Transform a formula in prenex normal form"""
@@ -893,13 +1074,15 @@ class ToPrenexCNF:
 
 
 class ToReversePrenexCNF(Transformer):
-    """Transform a formula in prenex CNF and transforms it in reverse prenex CNF normal form (push quantifiers in the innermost position possible)
+    """Transform a formula in prenex CNF and transforms it in reverse prenex CNF normal form (push quantifiers in the innermost position possible -- if it is immediate to do so)
     If the formula is not prenex CNF it will be made so before starting"""
 
     def __init__(self, visit_tokens=True):
         super().__init__(visit_tokens)
         self.freeVars = P9FreeVariablesExtractor()
         self.toPCNF = ToPrenexCNF()
+        self.stringer = ToString()
+        self.unique = ToUniqueVariables()
         self.commutes = {
             "existential_quantification": "disjunction",
             "universal_quantification": "conjunction",
@@ -909,19 +1092,15 @@ class ToReversePrenexCNF(Transformer):
         # ensures the tree is PCNF
         PCNFtree = self.toPCNF.transform_repeatedly(tree)
         if PCNFtree != tree:
-            print(
-                "I got a formula not in PCNF. I will transform it in PCNF and continue."
-            )
-            tree = PCNFtree
+            my_logger.debug(f"As an input of ToReversePrenexCNF I got a formula not in PCNF. Precisely {self.stringer.visit(tree)}. I have transformed it in PCNF: the formula is now {self.stringer.visit(PCNFtree)}.")
 
-        unique = ToUniqueVariables()
-        adjusted_tree = unique.adjust_variables(tree)
+        adjusted_tree = self.unique.adjust_variables(PCNFtree)
         oldtree = adjusted_tree
-        newtree = unique.adjust_variables(self.transform(adjusted_tree))
+        newtree = self.unique.adjust_variables(self.transform(adjusted_tree))
         while newtree != oldtree:
             # print("I am transforming an additional time")
             oldtree = newtree
-            newtree = unique.adjust_variables(self.transform(oldtree))
+            newtree = self.unique.adjust_variables(self.transform(oldtree))
         return newtree
 
     def quantification(self, children, quantification_type: str):
@@ -992,101 +1171,195 @@ class ToReversePrenexCNF(Transformer):
 # textp = '(all X exists Y (R(X,Y) | P(X,Z))).'
 # textp = '(exists X - all Y (R(X,Y) |  P(X,Z))).'
 # textp = '(all X all Y (R(X,Y) | P(Y))).'
-# textp = '(all Y all X (R(X,Y) | P(Y))).'
+# textp = "(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T))."
 # astp=prover9_parser.parse(textp)
-# treeExplainer(astp)
+# treeExplainerGREEN(astp)
 # print(astp)
 # # treeExplainer(ToPrenex().adjust_transform_repeatedly(astp))
-# treeExplainer(tp.adjust_transform_repeatedly(astp))
+# treeExplainerRED(tp.adjust_transform_repeatedly(astp))
 # exit()
 
+class ToMiniscopedCNF(Transformer):
+    """Transform a formula in prenex CNF and transforms it in reverse prenex CNF normal form (push quantifiers in the innermost position possible -- if it is immediate to do so)
+    If the formula is not prenex CNF it will be made so before starting"""
 
-class ToString(Interpreter):
-    """Transform a tree into a formatted string"""
+    def __init__(self, visit_tokens=True):
+        super().__init__(visit_tokens)
+        self.freeVars = P9FreeVariablesExtractor()
+        self.toPCNF = ToPrenexCNF()
+        self.commutes = {
+            "existential_quantification": "disjunction",
+            "universal_quantification": "conjunction",
+        }
+        self.unique = ToUniqueVariables()
+        self.flattener = AssociativeFlattener()
+        self.reverse_flattener = ReverseAssociativeFlattener()
 
-    def print_binary_op(self, tree, op: str):
-        left, right = tree.children
-        yes_left_par = left.data not in ["predicate", "equality_atom"]
-        yes_right_par = right.data not in ["predicate", "equality_atom"]
-        return (
-            "(" * yes_left_par
-            + self.visit(left)
-            + ")" * yes_left_par
-            + f" {op} "
-            + "(" * yes_right_par
-            + self.visit(right)
-            + ")" * yes_right_par
-        )
+    def adjust_transform_repeatedly(self, tree):
+        # ensures the tree is PCNF
+        PCNFtree = self.toPCNF.transform_repeatedly(tree)
+        # ensures variable name uniqueness
+        UniquePNCFtree = self.unique.adjust_variables(PCNFtree)
+        # ensures the tree is associatively-flattened
+        FlatUniquePNCFtree = self.flattener.transform_repeatedly(UniquePNCFtree)
+        oldtree = FlatUniquePNCFtree
+        # newtree = self.unique.adjust_variables(self.transform(oldtree))
+        # newtree = self.transform(oldtree)
+        newtree = self.flattener.transform_repeatedly(self.transform(oldtree))
+        while newtree != oldtree:
+            oldtree = newtree
+            # newtree = self.unique.adjust_variables(self.transform(oldtree))
+            # newtree = self.transform(oldtree)
+            newtree = self.flattener.transform_repeatedly(self.transform(oldtree))
+        return self.unique.adjust_variables(self.reverse_flattener.transform_repeatedly(newtree))
 
-    entailment = partialmethod(print_binary_op, op="->")
-    reverse_entailment = partialmethod(print_binary_op, op="<-")
-    equivalence_entailment = partialmethod(print_binary_op, op="<->")
-    disjunction = partialmethod(print_binary_op, op="|")
-    conjunction = partialmethod(print_binary_op, op="&")
-    entailment_exc = entailment
-    equivalence_entailment_exc = reverse_entailment
-    equivalence_entailment_exc = equivalence_entailment
-    disjunction_exc = disjunction
-    conjunction_exc = conjunction
+    def quantification(self, children, quantification_type: str):
+        *quantified_variables, quantified_formula = children
 
-    def negation(self, tree):
-        negated_formula = tree.children[0]
-        return f"-({self.visit(negated_formula)})"
+        if quantified_formula.data in ["negation", "negation_exc"]:
+            negated_formula = quantified_formula.children[0]
+            return Tree(
+                "negation",
+                [
+                    Tree(
+                        dual_quantifier(quantification_type),
+                        quantified_variables +[negated_formula],
+                    )
+                ],
+            )
+            
+        if quantified_formula.data in BINARY_OPS:
+            def get_candidate_variables_for_splitting(quantified_variables, quantified_formula):
+                """If None is returned there are no candidates for splitting"""
+                if len(quantified_variables) < 2: return None 
+                variable_sets = [frozenset(self.freeVars.transform(child)) for child in quantified_formula.children]
+                variable_to_containing_sets = {var: {var_set for var_set in variable_sets if var in var_set} for var in quantified_variables}
 
-    negation_exc = negation
+                candidates = set()
+                for var1 in quantified_variables:
+                    for var2 in frozenset(quantified_variables).difference(frozenset.union(*variable_to_containing_sets[var1])):
+                        candidates.add(frozenset({var1,var2}))             
+                if len(candidates) > 0:
+                    # for now a random (not random, but meaninglessy ordered for reproducibility) couple of candidate variables is returned
+                    var1, var2 = tuple(sorted(list(candidates))[0])
+                    # order the variables in fix order for reproducibility
+                    if str(var1) > str(var2):
+                        temp = var1
+                        var1 = var2
+                        var2 = temp
+                    return var1, var2
+                else:
+                    return None
+            
+            candidates = get_candidate_variables_for_splitting(quantified_variables, quantified_formula)
+            if candidates:
+                var1, var2 = candidates
+                remaining_variables = [var for var in quantified_variables if var not in [var1, var2]]
+                children1 = [child for child in quantified_formula.children if var1 in self.freeVars.transform(child)]
+                children2 = [child for child in quantified_formula.children if var2 in self.freeVars.transform(child)]
+                if len(children1) + len(children2) > len(quantified_formula.children): raise TypeError(f"The variables {var1}, {var2} do not split the set {quantified_variables}! Something went wrong during the splitting calculation")
+                if 0 in [len(children1),len(children2)]: raise TypeError(f"Either of variables {var1}, {var2} does not appear in the formula {quantified_formula}! This should not happen.")
+                remaining_children = [child for child in quantified_formula.children if (child not in children1) and (child not in children2)]
+                if len(remaining_variables) == 0:
+                    if len(remaining_children) == 0:
+                        return Tree(
+                            quantified_formula.data,
+                            [Tree(quantification_type, [var1, (Tree(quantified_formula.data, children1) if len(children1) > 1 else children1[0])]), 
+                             Tree(quantification_type, [var2, (Tree(quantified_formula.data, children2) if len(children2) > 1 else children2[0])])],
+                        )
+                    if len(remaining_children) > 0:
+                        # raise TypeError("The variables do not exhaust the children but there are no other variables!") # <- can happen if there is a child with no variables
+                        return Tree(
+                            quantified_formula.data,
+                            remaining_children + [Tree(quantification_type, [var1, (Tree(quantified_formula.data, children1) if len(children1) > 1 else children1[0])]), Tree(quantification_type, [var2, (Tree(quantified_formula.data, children2) if len(children2) > 1 else children2[0])])],
+                        )
+                         
+                if len(remaining_variables) > 0:
+                    if len(remaining_children) == 0:
+                        return Tree(quantification_type, remaining_variables + [Tree(
+                            quantified_formula.data,
+                            [Tree(quantification_type, [var1, (Tree(quantified_formula.data, children1) if len(children1) > 1 else children1[0])]), Tree(quantification_type, [var2, (Tree(quantified_formula.data, children2) if len(children2) > 1 else children2[0])])],
+                        )])
+                    if len(remaining_children) > 0:
+                        return Tree(quantification_type, remaining_variables + [Tree(
+                            quantified_formula.data,
+                            remaining_children + [Tree(quantification_type, [var1, (Tree(quantified_formula.data, children1) if len(children1) > 1 else children1[0])]), Tree(quantification_type, [var2, (Tree(quantified_formula.data, children2) if len(children2) > 1 else children2[0])])],
+                        )])
+            else:
+                variable_appearing_less = sorted([(var,len([child for child in quantified_formula.children if var in self.freeVars.transform(child)])) for var in quantified_variables], key= lambda x:x[1])[0][0]
 
-    def print_quantification_op(self, tree, op: str):
-        variable, quantified_formula = tree.children
-        return f"{op} {variable} ({self.visit(quantified_formula)})"
+                children_less = [child for child in quantified_formula.children if variable_appearing_less in self.freeVars.transform(child)]
+                remaining_variables = [var for var in quantified_variables if var != variable_appearing_less]
+                remaining_children = [child for child in quantified_formula.children if child not in children_less]
+                assert len(children_less) + len(remaining_children) == len(quantified_formula.children)
+                if len(remaining_children) == 0:
+                    pass # This case is skipped here since if the tree arrives at the end of this function it will returned alredy 
+                    # return Tree(quantification_type,
+                    #     quantified_variables + [quantified_formula])
+                if len(remaining_children) > 0:
+                    if len(remaining_variables) == 0:
+                        return Tree(quantified_formula.data, remaining_children + [Tree(quantification_type, [variable_appearing_less] + (children_less if len(children_less) == 1 else [Tree(quantified_formula.data, children_less)]))])
+                    if len(remaining_variables) > 0:
+                        return Tree(quantification_type, 
+                            remaining_variables + [Tree(quantified_formula.data, remaining_children + [Tree(quantification_type, [variable_appearing_less] + (children_less if len(children_less) == 1 else [Tree(quantified_formula.data, children_less)]))])]
+                        )
+                     
+        if quantified_formula.data == self.commutes[quantification_type]:
+            return Tree(
+                quantified_formula.data,
+                [Tree(quantification_type, quantified_variables + [child]) for child in quantified_formula.children],
+            )
+        return Tree(quantification_type, quantified_variables + [quantified_formula])
 
-    universal_quantification = partialmethod(print_quantification_op, op="all")
-    existential_quantification = partialmethod(print_quantification_op, op="exists")
-
-    def print_bounded_quantification_op(self, tree, op: str):
-        variable, bounding_formula, quantified_formula = tree.children
-        return f"{op} ({variable} ∈ {{{variable} | {self.visit(bounding_formula)}}}) ({self.visit(quantified_formula)})"
-
-    universal_quantification_bounded = partialmethod(
-        print_bounded_quantification_op, op="all"
+    existential_quantification = partialmethod(
+        quantification, quantification_type="existential_quantification"
     )
-    existential_quantification_bounded = partialmethod(
-        print_bounded_quantification_op, op="exists"
+    universal_quantification = partialmethod(
+        quantification, quantification_type="universal_quantification"
     )
 
-    def equality_atom(self, tree):
-        left, right = tree.children
-        return f"{str(left)} = {str(right)}"
+    def negation_exc(self, children):
+        negated_formula = children[0]
+        if negated_formula.data in ["negation", "negation_exc"]:
+            doubly_negated_formula = negated_formula.children[0]
+            return doubly_negated_formula
+        return Tree("negation", children)
 
-    def predicate(self, tree):
-        predicate_symbol, *term_list = tree.children
-        return f"{predicate_symbol}({",".join([term.value if hasattr(term, "value") else str(term) for term in term_list])})"
+    negation = negation_exc
 
-    def VARIABLE(self, tree):
-        return str(tree)
 
-    def true(self, tree):
-        return "True"
 
-    def false(self, tree):
-        return "False"
+def test_miniscoping():    
+    tp=ToMiniscopedCNF()
+    textp = 'all X (exists Y R(X,Y)) & (exists Z P(X,Z)).'
+    textp = '((all X (exists Y R(X,Y))) & (all X(exists Z P(X,Z)))).'
+    textp = '((exists X (all Y R(X,Y))) | (exists X (all Z P(X,Z)))).'
+    textp = '((all X (exists Y R(X,Y))) | (all X(exists Z P(X,Z)))).'
+    textp = '(all X exists Y (R(X,Y) | P(X,Z))).'
+    textp = '(exists X - all Y (R(X,Y) |  P(X,Z))).'
 
-    def pass_par_rule(self, tree, par: str):
-        return Tree(Token("RULE", par), self.visit_children(tree))
+    tests = [("(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T)).","(all Y (all Z (all T ((all TAU ((-(cP(Y,Z,TAU))) | (-(tP(T,TAU))))) | (all X ((-(cP(X,Y,T))) | cP(X,Z,T)))))))."),
+            ("(all X all Y (C(Y) & (A(X) | B(X,Y)))).","((all Y (C(Y))) & (all X (A(X) | (all Y1 (B(X,Y1))))))."),
+            ("(all X all Y A(X) & B(X,Y)).","((all X (A(X))) & (all X1 (all Y (B(X1,Y)))))."),
+            ("(all X all Y (A(X) | B(X,Y))).","(all X (A(X) | (all Y (B(X,Y)))))."),
+            ("(all Y (C(Y) | (A(X) | B(X,Y)))).","(A(X) | (all Y (C(Y) | B(X,Y))))."),
+            ("(all X -( A(X) | False)).","((True) & (-(exists X (A(X)))))."),
+            ("(all X all Y (C(Y) | (A(X) & B(X,Y)))).", "(((all X (A(X))) | (all Y (C(Y)))) & (all Y1 (C(Y1) | (all X1 (B(X1,Y1))))))."),
+            ("(all X all Y (C(Y) & (A(X) | B(X,Y)))).","((all Y (C(Y))) & (all X (A(X) | (all Y1 (B(X,Y1))))))."),
+            ]
+    for test in tests:
+        miniscoped = ToMiniscopedCNF().adjust_transform_repeatedly(prover9_parser.parse(test[0]))
+        ground = prover9_parser.parse(test[1])
+        assert miniscoped == ground, [treeExplainerRED(miniscoped), treeExplainerGREEN(ground)]
+        
+    textp = '(all X all Y (R(X,Y) | P(Y))).'
+    astp=prover9_parser.parse(textp)
+    treeExplainerGREEN(astp)
+    treeExplainer(ToReversePrenexCNF().adjust_transform_repeatedly(astp))
+    treeExplainerRED(tp.adjust_transform_repeatedly(astp))
+    print(ToString().visit(tp.adjust_transform_repeatedly(astp)))
 
-    def pass_par(self, tree, par: str):
-        return Tree(par, self.visit_children(tree))
 
-    def start(self, tree):
-        return self.visit(tree.children[0])
-
-    def lines(self, tree):
-        line_s: list = tree.children
-        visited_line_s: list[str] = [self.visit(line) for line in line_s]
-        return "\n".join(visited_line_s)
-
-    def line(self, tree):
-        formula = tree.children[0]
-        return f"({self.visit(formula)})."
 
 
 def test_to_string():
@@ -1144,7 +1417,7 @@ def test_to_string():
 
 
 class RemoveLines(Transformer):
-    """removes start, lines, and line nodes. Works only if the tree starts with one start, then one lines, then one single line"""
+    """removes start, lines, and line nodes; and also labels. Works only if the tree starts with one start, then one lines, then one single line"""
 
     def start(self, children):
         assert children[0].data == "lines"
@@ -1153,7 +1426,17 @@ class RemoveLines(Transformer):
         assert lines.children[0].data == "line"
         line = lines.children[0]
         return (axiom := line.children[0])
-
+class RemoveLabels(Transformer):
+    """removes labels."""
+    def label(self, children):
+        return Discard
+    
+def test_remove_labels():
+    text = "all A (B(A)) # label(\"proper-continuant-part-of-transitive-at-a-time\") ."
+    ast = prover9_parser.parse(text)
+    tast = RemoveLabels().transform(ast)
+    treeExplainerGREEN(ast)
+    treeExplainerRED(tast)
 
 def get_existential_closure(tree: Tree, exceptions={}) -> Tree:
     free_vars: set[str] = (
@@ -1161,6 +1444,6 @@ def get_existential_closure(tree: Tree, exceptions={}) -> Tree:
     )
     vars_to_close = free_vars.difference(exceptions)
     closed_tree = tree.copy()
-    for var in vars_to_close:
+    for var in sorted(list(vars_to_close)): # order for reproducibility
         closed_tree = Tree("existential_quantification", [var, closed_tree])
     return closed_tree

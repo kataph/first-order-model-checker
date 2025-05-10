@@ -8,10 +8,12 @@ from functools import partialmethod, partial, wraps
 from itertools import product 
 
 from model import prover9_parser
-from join_algorithms import Relation, hash_join
+from join_algorithms import Relation, hash_join, intersection_join
 
 
-from basic_formulas_manipulation import ToReversePrenexCNF, P9FreeVariablesExtractor, ToPrenexCNF, ToUniqueVariables, BINARY_OPS, dual_quantifier, dual_op, treeExplainer, treeExplainerRED, treeExplainerGREEN, RemoveLines, ToString, get_existential_closure
+from basic_formulas_manipulation import ToMiniscopedCNF, ToReversePrenexCNF, P9FreeVariablesExtractor, ToPrenexCNF, ToUniqueVariables, BINARY_OPS, dual_quantifier, dual_op, treeExplainer, treeExplainerRED, treeExplainerGREEN, treeExplainerYELLOW, treeExplainerReturning, my_logger, RemoveLines, ToString, get_existential_closure
+
+
 
 NEUTRAL_ELEMENT_OF_OPERATION = {
     "conjunction": "true",
@@ -39,6 +41,8 @@ EXAMPLE_AXIOMS = [
     "(all X all Y lec(Y) -> att(X,Y)).",
     "(att(X,Y)).",
     "(- exists X (B(X) & - - - - att(X,Y))).",
+    "(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T)).",
+    "all P all Q all R all S  ((((continuantPartOf(P,Q,R)) & (temporalPartOf(S,R)))) -> (continuantPartOf(P,Q,S))) # label(\"continuant-part-of-dissective-on-third-argument-temporal\") ."
 ] 
 EXAMPLE_ASTS = [RemoveLines().transform(prover9_parser.parse(example_axiom)) for example_axiom in EXAMPLE_AXIOMS]
 
@@ -73,11 +77,11 @@ def introduce_dom(self, children, param = "negation") -> Tree:
         if negated_formula.data == "predicate":
             predicate_symbol, *term_list = negated_formula.children
             if self.ranged_variable in [str(t) for t in term_list]:
-                return Tree("dom", [Token("VARIABLE", self.ranged_variable)])
+                return Tree("dom", [Token("VARIABLE", str(self.ranged_variable))])
         if negated_formula.data == "equality_atom":
             left, right = negated_formula.children
             if self.ranged_variable in [str(left), str(right)]:
-                return Tree("dom", [Token("VARIABLE", self.ranged_variable)])
+                return Tree("dom", [Token("VARIABLE", str(self.ranged_variable))])
     return Tree(param, children)
 
 
@@ -235,7 +239,7 @@ class ExistentialFormulaTransformer(Transformer):
         super().__init__(visit_tokens)
         self.freeVars = P9FreeVariablesExtractor()
         self.toPCNF = ToPrenexCNF()
-        self.CNFminiscoper = ToReversePrenexCNF()
+        self.CNFminiscoper_simple = ToReversePrenexCNF()
         self.stringer = ToString()
         self.remover = RemoveLines()
 
@@ -253,9 +257,9 @@ class ExistentialFormulaTransformer(Transformer):
         
         self.check_if_quantification_is_useless(ranged_variable, ranged_formula)
         
-        CNFminiscoped_ranged_formula = self.CNFminiscoper.adjust_transform_repeatedly(ranged_formula)
+        CNFminiscoped_ranged_formula = self.CNFminiscoper_simple.adjust_transform_repeatedly(ranged_formula)
         if CNFminiscoped_ranged_formula != ranged_formula:
-            print(f"Attention: the fomula had shape 'exists x phi(x)'. Precisely phi = '{self.stringer.visit(ranged_formula)}'. However, in such a formula phi(x) is not CNFminiscoped. I have CNFminiscoped it. Phi is now: {self.stringer.visit(CNFminiscoped_ranged_formula)}")
+            my_logger.debug(f"As an input of ExistentialFormulaTransformer the fomula had shape 'exists x phi(x)'. Precisely phi = '{self.stringer.visit(ranged_formula)}'. However, in such a formula phi(x) is not CNFminiscoped. I have (simply-)CNFminiscoped it. Phi is now: {self.stringer.visit(CNFminiscoped_ranged_formula)}")
 
         oldtree = CNFminiscoped_ranged_formula
         #print("Attached polarity to nodes of AST tree of ranged formula in CNF miniscoped form")
@@ -330,7 +334,10 @@ class GetCoRange(ExistentialFormulaTransformer):
                 return get_existential_closure(finalized_tree, exceptions={self.ranged_variable})
     
     existential_quantification = partialmethod(remove_useless_quantification, param = "existential_quantification")
-    existential_quantification = partialmethod(remove_useless_quantification, param = "existential_quantification")
+    universal_quantification = partialmethod(remove_useless_quantification, param = "universal_quantification")
+    universal_quantification_bounded = partialmethod(reduce_to_existential_quantifier, param = "universal_quantification_bounded")
+    existential_quantification_bounded = partialmethod(remove_useless_quantification, param = "existential_quantification_bounded")
+    
     disjunction = partialmethod(delete_cond_from_disjunction, param = "disjunction")
     disjunction_exc = disjunction
     
@@ -355,6 +362,7 @@ check_if_formula_is_existential = partial(check_if_formula_is_quantification, qu
 check_if_formula_is_universal = partial(check_if_formula_is_quantification, quantification_type = "universal")
 
 def get_range_corange(ast: Tree, quantification_type: Literal["existential", "universal"]) -> tuple[Tree, Tree]:
+    ast = RemoveLines().transform(ast)
     if quantification_type == "existential":
         range = GetRange().adjust_transform_repeatedly(ast)
         corange = GetCoRange().adjust_transform_repeatedly(ast)
@@ -410,7 +418,8 @@ class toBoundedMinifiedCNF(Interpreter):
         super().__init__()
         self.freeVars = P9FreeVariablesExtractor()
         self.toPCNF = ToPrenexCNF()
-        self.CNFminiscoper = ToReversePrenexCNF()
+        # self.CNFminiscoper = ToReversePrenexCNF()
+        self.CNFminiscoper = ToMiniscopedCNF()
         self.stringer = ToString()
         self.remover = RemoveLines()
         self.variablesAdjuster = ToUniqueVariables()
@@ -424,28 +433,27 @@ class toBoundedMinifiedCNF(Interpreter):
     
     def adjust_transform_repeatedly(self, tree):
         # the formula is CNF minified and corrected for variables.
+        # treeExplainerYELLOW(tree)
         CNFminiscoped_ranged_formula = self.CNFminiscoper.adjust_transform_repeatedly(tree)
         if CNFminiscoped_ranged_formula != tree:
-            print(f"Attention: the formula was not CNFminiscoped. I have CNFminiscoped it.")
+            my_logger.debug(f"As an input of toBoundedMinifiedCNF the fomula was not CNFminiscoped. Precisely {self.stringer.visit(tree)}. I have (fully-)CNFminiscoped it. It is now: {self.stringer.visit(CNFminiscoped_ranged_formula)}")
+        # treeExplainerYELLOW(CNFminiscoped_ranged_formula)
 
+        # treeExplainerGREEN(tree); treeExplainerRED(CNFminiscoped_ranged_formula); exit()
         oldtree = self.variablesAdjuster.adjust_variables(CNFminiscoped_ranged_formula)
         # treeExplainerGREEN(oldtree)
+        # treeExplainerRED(X); exit()
         newtree = self.variablesAdjuster.adjust_variables(self.visit(oldtree))
         # treeExplainerRED(newtree)
         # oldtree = (CNFminiscoped_ranged_formula)
         # newtree = (self.visit(oldtree))
         
-        # X = (self.visit(newtree))
-        # treeExplainerGREEN(X)
-        # X = (self.visit(X))
-        # treeExplainerGREEN(X)
-        # X = (self.visit(X))
-        # treeExplainerRED(X)
-        
         while newtree != oldtree:
             oldtree = newtree
+            # treeExplainerGREEN(oldtree);
             newtree = self.variablesAdjuster.adjust_variables(self.visit(oldtree))
-            # newtree = (self.visit(oldtree))
+            # treeExplainerRED(newtree)
+            # print("Gonna continue" if newtree != oldtree else "gonna stop")
         return newtree
 
     def quantification(self, tree, quantification_type: Literal["existential", "universal"]):
@@ -470,7 +478,7 @@ class toBoundedMinifiedCNF(Interpreter):
 
 
 class evaluateQuantifierBound(Transformer):
-    """Given a quantifier bound for a certain variable and formula, it calculates the set of all constants that satisfy the (existential closure of the) formula. E.g. with the model A(a,b).B(a,c).V(a,b,z), the bound {X | exists Y A(X,Y) & exists Z B(X,Z)} is evaluated to {a}.
+    """Given a quantifier bound for a certain variable and formula, it calculates the set of all constants that satisfy the (existential closure of the) formula. E.g. with the model A(a,b).B(a,c).V(a,b,z), the bound {X | exists Y A(X,Y) & exists Z B(X,Z)} is evaluated to Relation(("X"), {("a",)}).
     Assumes that the bounding formula is existentially closed except for the bounded variable."""
     def __init__(self, ranged_variable, model: Model, visit_tokens = True):
         super().__init__(visit_tokens)
@@ -523,12 +531,14 @@ class evaluateQuantifierBound(Transformer):
         if not "CONSTANT" in (token.type for token in term_list): 
             # only variables
             tuple_header = tuple(token.value for token in term_list)
+            if not predicate_symbol in self.model.ordered_truth_table:
+                raise TypeError(f"The predicate {predicate_symbol} is not in the model ordered_truth_table! The model signature is {self.model.signature}")
             for tuple_of_constants in self.model.ordered_truth_table[predicate_symbol]:
                 assert len(term_list) == len(tuple_of_constants), f"The predicate {predicate_symbol} has the wrong number of values!"
                 tuple_set.add(tuple_of_constants)
         else:
             # there is at least one constant
-            indices_of_constants = [i for i,token in enumerate(zip(term_list, )) if token.type=="CONSTANT"]
+            indices_of_constants = [i for i,token in enumerate(term_list) if token.type=="CONSTANT"]
             tuple_header = tuple(token.value for token in term_list if token.type=="CONSTANT")
             for tuple_of_constants in self.model.ordered_truth_table[predicate_symbol]:
                 assert len(term_list) == len(tuple_of_constants), f"The predicate {predicate_symbol} has the wrong number of values!"
@@ -571,13 +581,16 @@ class evaluateQuantifierBound(Transformer):
         right_variables = right_evaluation.tuple_header
 
         # if there are no common variables, the join becomes a cartesian product
-        if set(left_variables).intersection(right_variables) == set():
+        if (common_variables := set(left_variables).intersection(right_variables)) == set():
             tuple_set = set()
             tuple_header = left_variables+right_variables
             for left_tuple in left_evaluation.tuple_set:
                 for right_tuple in right_evaluation.tuple_set:
                     tuple_set.add(left_tuple + right_tuple)
             joined_relation = Relation(tuple_header, tuple_set)
+        # if the variables of one relation are subset of the variables of the other, a simple intersection is executed
+        elif common_variables == set(left_variables) or common_variables == set(right_variables):
+            joined_relation = intersection_join(left_evaluation, right_evaluation)
         # if there are common variables, a hash join on the common variables is executed
         elif set(left_variables).intersection(right_variables) != set():
             keys = set(left_variables).intersection(right_variables)
@@ -607,7 +620,7 @@ class evaluateQuantifierBound(Transformer):
     
     def existential_quantification(self, items):
         quantified_variable, relation_from_inner_formula = items
-        if not isinstance(quantified_variable, Token) or not isinstance(relation_from_inner_formula, Relation):
+        if not isinstance(quantified_variable, (Token,str)) or not isinstance(relation_from_inner_formula, Relation):
             raise TypeError(f"Something wrong with returned variable or tuples: {quantified_variable} or {relation_from_inner_formula}")
         if quantified_variable == self.ranged_variable:
             raise TypeError(f"Quantified variable {quantified_variable} is the same as the ranged variable! This should not happen.")
@@ -652,6 +665,8 @@ def test_bond_evaluation():
     model = p9model.read_model(prover9_parser.parse("A(a).B(b).E(a,b).E(b,c).R(c,e).U(e,b)."))
     # formula = RemoveLines().transform(prover9_parser.parse("exists Z exists Y (E(X,Z) & R(Z,Y) & U(Y))."))
     formula = RemoveLines().transform(prover9_parser.parse("((exists Z exists Y (E(X,Z) & R(Z,Y))) | (exists Y2 U(Y2,X)))."))
+    model = p9model.read_model(prover9_parser.parse("A(a,b).B(a,c).V(a,b,z)."))
+    formula = RemoveLines().transform(prover9_parser.parse("(exists Y A(X,Y) & exists Z B(X,Z))."))
     evBound = evaluateQuantifierBound("X", model)
     treeExplainer(model)
     treeExplainer(formula)
@@ -660,18 +675,47 @@ def test_bond_evaluation():
 
 def test_range():
     assert GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0]) == Tree("existential_quantification", [Token('VARIABLE', 'Y'), Tree("predicate", [Token("PREDICATE_SYMBOL","att"), Token("VARIABLE","X"), Token("VARIABLE","Y")])]), GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0])
+    
     assert GetRange().adjust_transform_repeatedly(GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0])) == Tree("existential_quantification", [Token('VARIABLE', 'X'), Tree("predicate", [Token("PREDICATE_SYMBOL","att"), Token("VARIABLE","X"), Token("VARIABLE","Y")])]), GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0])
-    assert toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[0]) == Tree('disjunction', [Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')]), Tree('negation', [Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')])])]), Tree('existential_quantification_bounded', [Token('VARIABLE', 'X'), Tree('existential_quantification', [Token('VARIABLE', 'Y1'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y1')])]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y2'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y2')]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y2')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y2')])])])])])
     
-    assert toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[1]) == Tree('existential_quantification_bounded', [Token('VARIABLE', 'X2'), Tree('dom', [Token('VARIABLE', 'X2')]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('existential_quantification', ['X', Tree('predicate', [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Y')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'Q'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Y')])])])])
+    calc = toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[0])
+    ground = Tree('disjunction', [Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')]), Tree('negation', [Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')])])]), Tree('existential_quantification_bounded', [Token('VARIABLE', 'X'), Tree('existential_quantification', [Token('VARIABLE', 'Y1'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y1')])]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y2'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y2')]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y2')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y2')])])])])])
+    assert calc == ground, f"Expected green tree, actually got red one, which is {calc}{treeExplainerGREEN(ground)}{treeExplainerRED(calc)}" 
     
-    assert toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[2]) == Tree('disjunction', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'U'), Token('VARIABLE', 'V')]), Tree('existential_quantification_bounded', [Token('VARIABLE', 'X2'), Tree('dom', [Token('VARIABLE', 'X2')]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('existential_quantification', ['X', Tree('predicate', [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Y')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'Q'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Y')])])])])])
+    assert toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[1]) == Tree('existential_quantification_bounded', [Token('VARIABLE', 'X1'), Tree('dom', [Token('VARIABLE', 'X1')]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('existential_quantification', ['X', Tree('predicate', [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X1'), Token('VARIABLE', 'Y')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'Q'), Token('VARIABLE', 'X1'), Token('VARIABLE', 'Y')])])])])
     
-    treeExplainerGREEN(EXAMPLE_ASTS[3])
-    treeExplainerRED(toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[3]))
+    assert toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[2]) == Tree('disjunction', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'U'), Token('VARIABLE', 'V')]), Tree('existential_quantification_bounded', [Token('VARIABLE', 'X1'), Tree('dom', [Token('VARIABLE', 'X1')]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('existential_quantification', ['X', Tree('predicate', [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'P'), Token('VARIABLE', 'X1'), Token('VARIABLE', 'Y')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'Q'), Token('VARIABLE', 'X1'), Token('VARIABLE', 'Y')])])])])])
+    
+    ground = Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')])]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'X'), Tree('dom', [Token('VARIABLE', 'X')]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])])])])
+    calc = toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[3])
+    assert calc == ground, f"I got the red tree, but I should have got the green one (all starting from the black and white tree) {treeExplainerRED(calc)}{treeExplainerGREEN(ground)}{treeExplainer(EXAMPLE_ASTS[3])}---\n\nString>>>{ToString().visit(calc)}" 
 
-test_range()
-exit()
+    
+    assert toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[4]) == Tree('predicate', [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])
+    
+    assert toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[5]) == Tree('universal_quantification_bounded', [Token('VARIABLE', 'X'), Tree('conjunction', [Tree('predicate', [Token('PREDICATE_SYMBOL', 'B'), Token('VARIABLE', 'X')]), Tree('existential_quantification', ['Y', Tree('predicate', [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'B'), Token('VARIABLE', 'X')])]), Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])])])])
+    
+    
+    base = EXAMPLE_ASTS[6]
+    ground = Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y4'), Tree('conjunction', [Tree('existential_quantification', [Token('VARIABLE', 'Z'), Tree('existential_quantification', [Token('VARIABLE', 'TAU'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'cP'), Token('VARIABLE', 'Y4'), Token('VARIABLE', 'Z'), Token('VARIABLE', 'TAU')])])]), Tree('existential_quantification', [Token('VARIABLE', 'T'), Tree('existential_quantification', [Token('VARIABLE', 'X'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'cP'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y4'), Token('VARIABLE', 'T')])])])]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Z2'), Tree('existential_quantification', ['Y', Tree('existential_quantification', [Token('VARIABLE', 'TAU1'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'cP'), Token('VARIABLE', 'Y'), Token('VARIABLE', 'Z2'), Token('VARIABLE', 'TAU1')])])]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'T3'), Tree('conjunction', [Tree('existential_quantification', [Token('VARIABLE', 'TAU2'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'tP'), Token('VARIABLE', 'T3'), Token('VARIABLE', 'TAU2')])]), Tree('existential_quantification', [Token('VARIABLE', 'Y1'), Tree('existential_quantification', [Token('VARIABLE', 'X1'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'cP'), Token('VARIABLE', 'X1'), Token('VARIABLE', 'Y1'), Token('VARIABLE', 'T3')])])])]), Tree('disjunction', [Tree('universal_quantification_bounded', [Token('VARIABLE', 'TAU3'), Tree('conjunction', [Tree('existential_quantification', [Token('VARIABLE', 'Z1'), Tree('existential_quantification', [Token('VARIABLE', 'Y2'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'cP'), Token('VARIABLE', 'Y2'), Token('VARIABLE', 'Z1'), Token('VARIABLE', 'TAU3')])])]), Tree('existential_quantification', [Token('VARIABLE', 'T1'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'tP'), Token('VARIABLE', 'T1'), Token('VARIABLE', 'TAU3')])])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'cP'), Token('VARIABLE', 'Y4'), Token('VARIABLE', 'Z2'), Token('VARIABLE', 'TAU3')])]), Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'tP'), Token('VARIABLE', 'T3'), Token('VARIABLE', 'TAU3')])])])]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'X2'), Tree('existential_quantification', [Token('VARIABLE', 'Y3'), Tree('existential_quantification', [Token('VARIABLE', 'T2'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'cP'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Y3'), Token('VARIABLE', 'T2')])])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'cP'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Y4'), Token('VARIABLE', 'T3')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'cP'), Token('VARIABLE', 'X2'), Token('VARIABLE', 'Z2'), Token('VARIABLE', 'T3')])])])])])])])
+    calc = toBoundedMinifiedCNF().adjust_transform_repeatedly(base)
+    assert calc == ground, f"From black/white should have got green, got red (=string) instead {treeExplainer(base), treeExplainerGREEN(ground), treeExplainerRED(calc), calc}"
+    
+    base = EXAMPLE_ASTS[7]
+    ground = Tree('universal_quantification_bounded', [Token('VARIABLE', 'R3'), Tree('conjunction', [Tree('existential_quantification', [Token('VARIABLE', 'S'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'temporalPartOf'), Token('VARIABLE', 'S'), Token('VARIABLE', 'R3')])]), Tree('existential_quantification', [Token('VARIABLE', 'Q'), Tree('existential_quantification', [Token('VARIABLE', 'P'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'continuantPartOf'), Token('VARIABLE', 'P'), Token('VARIABLE', 'Q'), Token('VARIABLE', 'R3')])])])]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'S1'), Tree('existential_quantification', ['R', Tree('predicate', [Token('PREDICATE_SYMBOL', 'temporalPartOf'), Token('VARIABLE', 'S1'), Token('VARIABLE', 'R')])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'temporalPartOf'), Token('VARIABLE', 'S1'), Token('VARIABLE', 'R3')])]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Q2'), Tree('existential_quantification', [Token('VARIABLE', 'R1'), Tree('existential_quantification', [Token('VARIABLE', 'P1'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'continuantPartOf'), Token('VARIABLE', 'P1'), Token('VARIABLE', 'Q2'), Token('VARIABLE', 'R1')])])]), Tree('universal_quantification_bounded', [Token('VARIABLE', 'P2'), Tree('existential_quantification', [Token('VARIABLE', 'R2'), Tree('existential_quantification', [Token('VARIABLE', 'Q1'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'continuantPartOf'), Token('VARIABLE', 'P2'), Token('VARIABLE', 'Q1'), Token('VARIABLE', 'R2')])])]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'continuantPartOf'), Token('VARIABLE', 'P2'), Token('VARIABLE', 'Q2'), Token('VARIABLE', 'R3')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'continuantPartOf'), Token('VARIABLE', 'P2'), Token('VARIABLE', 'Q2'), Token('VARIABLE', 'S1')])])])])])])])
+    calc = toBoundedMinifiedCNF().adjust_transform_repeatedly(base)
+    assert calc == ground, f"From black/white should have got green, got red (=string) instead {treeExplainer(base), treeExplainerGREEN(ground), treeExplainerRED(calc), calc}"
+
+    
+    for i in [0,1,2,3,4,5,6]:
+        print("The tree:")
+        treeExplainerGREEN(EXAMPLE_ASTS[i])
+        print("Is correctly transformed into:")
+        treeExplainerRED((calc:=toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[i])))
+        print("Whose string version is >>>>>>>>>>", ToString().visit(calc))
+    
+    # open("delete.txt", "w", encoding = "utf-8").write(treeExplainerReturning(toBoundedMinifiedCNF().adjust_transform_repeatedly(EXAMPLE_ASTS[6])))
+    print("All good for bounded minified range co-range form")
 
 def test_range_corange_transform():
     asts = [RemoveLines().transform(prover9_parser.parse(example_axiom)) for example_axiom in EXAMPLE_AXIOMS]
@@ -696,6 +740,5 @@ def test_range_corange_transform():
     # treeExplainer(get_existential_bound_form(asts[1]))
     treeExplainer(toBoundedMinifiedCNF().adjust_transform_repeatedly(asts[1]))
     
-test_range_corange_transform()
 
 
