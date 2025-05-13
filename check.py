@@ -1,12 +1,16 @@
+import multiprocessing.pool
+# import multiprocessing
+# import multiprocess as multiprocessing
 import re
 import time
 from typing import Literal 
+import concurrent
 from tqdm import tqdm
 from lark import Lark, Tree, Token, Transformer
 from lark.visitors import Visitor, Interpreter
 
-from basic_formulas_manipulation import RemoveLabels, RemoveLines, treeExplainerRED, treeExplainerReturning, P9FreeVariablesExtractor
-from check_by_range_restriction import evaluateQuantifierBound, toBoundedMinifiedCNF
+from basic_formulas_manipulation import ReduceLogicalSignature, RemoveLabels, RemoveLines, treeExplainerRED, treeExplainerYELLOW, treeExplainerReturning, treeExplainerReturningNoExpl, P9FreeVariablesExtractor
+from check_by_range_restriction import evaluateQuantifierBound, toBoundedMinifiedNNF, toBoundedMinifiedPCNF, toBoundedPDNF
 from check_modulo_signature_equivalence import find_equivalent, intersects_equivalence_classes
 
 from join_algorithms import Relation
@@ -29,6 +33,44 @@ POSSIBLE_OPTIONS = {"equivalence", "range"}
 # text = 'all X A(X,Y) & exists Z P(Z) .'
 # text = 'all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l).'
 # text = 'all X A(X,Y,c2) | - exists Z P(X,Z,c) .'
+
+# def run_fastest(f1, f2):
+#     queue = multiprocessing.Queue()
+
+#     p1 = multiprocessing.Process(target=f1, args=(queue,))
+#     p2 = multiprocessing.Process(target=f2, args=(queue,))
+
+#     p1.start()
+#     p2.start()
+
+#     # Get the first result
+#     result = queue.get()
+
+#     # Terminate both processes just in case both are still running
+#     p1.terminate()
+#     p2.terminate()
+
+#     # Join to clean up the resources
+#     p1.join()
+#     p2.join()
+
+#     return result
+
+def run_fastest(f1, f2):
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        futures = [executor.submit(f) for f in (f1, f2)]
+        done, not_done = concurrent.futures.wait(
+            futures, return_when=concurrent.futures.FIRST_COMPLETED)
+
+        # Get the result of the first completed future
+        result = next(iter(done)).result()
+
+        print("Got result", result)
+        # Cancel remaining futures if possible
+        for future in not_done:
+            future.cancel()
+
+    return result
 
 
 class P9Explainer(Visitor):
@@ -119,7 +161,12 @@ class P9Evaluator(Interpreter):
         return representatives
 
     def evaluate(self, tree: Tree):
-        return self.visit(tree)
+        self.original_tree = tree
+        ret = self.visit(tree)
+        self.visited_tree = tree
+        if ret == None:
+            raise TypeError("This should not happen!")
+        return ret
     # this way I ensure I can visit with some input data
     def visit_with_memory(self, tree, additional_data = {}):
             tree.additional_data = additional_data
@@ -159,9 +206,16 @@ class P9Evaluator(Interpreter):
             else:
                 self.boundEvaluator.ranged_variable = quantified_variable
                 bound_relation: Relation = self.boundEvaluator.transform(bounding_formula)
-                if not len(bound_relation.tuple_header) == 1 and bound_relation.tuple_header[0] == quantified_variable:
-                    raise TypeError(f"Bounded formula evaluation returned an unexpected result: {bound_relation}")
-                bound = {t[0] for t in bound_relation.tuple_set} # de-tuple the singleton tuples
+                if len(bound_relation.tuple_header) == 0 and bound_relation.tuple_set == False:
+                    bound = set()
+                elif not (len(bound_relation.tuple_header) == 1 and bound_relation.tuple_header[0] == quantified_variable):
+                    open("delete-evaluated-bounding.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(bounding_formula))
+                    open("delete-visited.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(self.visited_tree))
+                    open("delete-evaluated.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(self.original_tree))
+                    open("delete-tree.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(tree))
+                    raise TypeError(f"In {quantification_type}, bounded formula evaluation returned an unexpected result: {bound_relation}. I've saved the tree received by the evaluator in delete-evaluated.txt and the bound being evaluated in delete-evaluated-bound.txt. The node in question is {tree} (printed to delete-tree.txt)")
+                else:
+                    bound = {t[0] for t in bound_relation.tuple_set} # de-tuple the singleton tuples
                 self.tree_to_bound_map.update({bounding_formula:bound})
                 
         substitutions = tree.additional_data.copy()
@@ -176,6 +230,7 @@ class P9Evaluator(Interpreter):
             
         # case that there are no constants to check
         if len(constants_to_check) == 0:
+            tree.explanation = f"{quantification_type == "universal"} because no constants to check (possibly after bound evaluation and equivalence class reductions)"
             return quantification_type == "universal"
 
         # this part decides if a loading bar should be activated 
@@ -312,13 +367,13 @@ def read_model_file(model_file: str) -> Model:
 
 # model = read_model_file("model.p9")
 
-def check_axioms_file(axioms_file: str, model: Model, options: list[str], multiprocessing_required = False, processes_number = 4):
+def check_axioms_file(axioms_file: str, model: Model, options: list[str], timeout: int, timeout_aux: int, no_timeout: bool, multiprocessing_required = False, processes_number = 4):
     """Read file line by line as a whole and checks axioms one-by-one against given model"""
     
     lines = open(axioms_file, "rt").readlines()
     
     if not multiprocessing_required:
-        check_lines(lines, model, options)
+        check_lines(lines, model, options, timeout, timeout_aux, no_timeout)
     else: 
         if processes_number < 1: raise TypeError(f"Asked for multiprocessing with non-positive process number")
         subliness = [lines[i::processes_number] for i in range(processes_number)]
@@ -326,14 +381,17 @@ def check_axioms_file(axioms_file: str, model: Model, options: list[str], multip
             process = ...
             process.execute(check_lines, sublines, model, options)
 
-def check_lines(lines: list[str], model: Model, options: list[str]):    
+def check_lines(lines: list[str], model: Model, options: list[str], timeout: int, timeout_aux: int, no_timeout: bool):    
     p9variables = P9FreeVariablesExtractor()
     p9evaluator = P9Evaluator(model, options)
+    p9evaluator_equivalence = P9Evaluator(model, ["equivalence"])
     p9explainer = P9Explainer()
     p9remover = RemoveLabels()
     
     axioms_true = 0
     axioms_false = 0
+    axioms_unexpected = 0
+    
     # for line in tqdm(lines):
     for line in lines:
         no_comment_line = re.sub("%.*", "", line) # the regex "%.*\n" is wrong because it will not match the last line of a file
@@ -359,9 +417,78 @@ def check_lines(lines: list[str], model: Model, options: list[str]):
 
 
         print(f"evaluating >>>{axiom_text}<<< against given model...")
-        if "range" in options:
-            axiomsAST = toBoundedMinifiedCNF().adjust_transform_repeatedly(axiomsAST)
-        evaluation = p9evaluator.evaluate(axiomsAST)
+        
+        axiomsAST_for_equivalence = axiomsAST
+        
+        # if "range" in options:
+        #     # axiomsAST = ReduceLogicalSignature().visit_repeatedly(axiomsAST)
+        #     # axiomsAST = toBoundedMinifiedPCNF(simple).adjust_transform_repeatedly(axiomsAST)
+            
+        #     axiomsAST = toBoundedMinifiedNNF().adjust_transform_repeatedly(axiomsAST) # <- nukes on continuant-part-of-has-weak-supplementation-at-a-time
+            
+        #     # axiomsAST = toBoundedPDNF().adjust_transform_repeatedly(axiomsAST)
+            
+            
+        def f_equivalences(axiomsAST_for_equivalence, p9evaluator_equivalence):
+            print("Started f_equivalences")
+            try:
+                evaluation = p9evaluator_equivalence.evaluate(axiomsAST_for_equivalence)
+            except Exception as e:
+                raise TypeError(f"Got an exception during f_equivalences: >>>{e}<<<")
+            return evaluation, axiomsAST#, f"Default parallel equivalence strategy was faster than the strategy called with the options {options}"
+            
+        def f_options(axiomsAST, p9evaluator, toBMNNF, options):
+            print("Started f_options")
+            try:
+                if "range" in options:
+                    axiomsAST = toBMNNF.adjust_transform_repeatedly(axiomsAST) # <- nukes on continuant-part-of-has-weak-supplementation-at-a-time
+                evaluation = p9evaluator.evaluate(axiomsAST)
+            except Exception as e:
+                raise TypeError(f"Got an exception during f_option: >>>{e}<<<")
+            return evaluation, axiomsAST#, f"The strategy called with the options {options} was faster than the default equivalence strategy"
+        # try: 
+
+            # future = run_fastest(f_equivalences, f_options)
+            # evaluation, message
+            # print(message)
+            
+        timeout = 10
+        timeout_aux = 60
+        
+        if not no_timeout:
+            evaluation = "possible time out"
+            try:
+                with multiprocessing.pool.ThreadPool() as pool:
+                    evaluation, axiomsAST_from_multithread = pool.apply_async(f_options, args=[axiomsAST, p9evaluator, toBoundedMinifiedNNF(), options]).get(timeout = timeout)
+                    axiomsAST = axiomsAST_from_multithread
+            except multiprocessing.TimeoutError:
+                print("==="*50)
+                print("Timeout! passing to next strat")
+                print("==="*50)
+                try:
+                    with multiprocessing.pool.ThreadPool() as pool:
+                        evaluation, axiomsAST_from_multithread = pool.apply_async(f_equivalences, args = [axiomsAST_for_equivalence, p9evaluator_equivalence]).get(timeout = timeout_aux)
+                        axiomsAST = axiomsAST_from_multithread
+                except multiprocessing.TimeoutError:
+                    print("==="*50)
+                    print("Timeout again! Nothing worked!")
+                    open("delete-exception-equivalence.txt","w",encoding = "utf-8").write(treeExplainerReturning(axiomsAST_for_equivalence))
+                    open("delete-exception-options.txt","w",encoding = "utf-8").write(treeExplainerReturning(axiomsAST))
+                    print("==="*50)
+                except Exception as e:
+                    raise TypeError(f"got from second strat {e}")
+            except Exception as e:
+                raise TypeError(f"got from first strat {e}")
+        else: 
+            evaluation = "not executed yet"
+            evaluation = p9evaluator.evaluate(axiomsAST)
+        
+        
+        # evaluation = p9evaluator.evaluate(axiomsAST)
+        # except Exception as e:
+        #     open("delete-exception-equivalence.txt","w",encoding = "utf-8").write(treeExplainerReturning(axiomsAST_for_equivalence))
+        #     open("delete-exception-options.txt","w",encoding = "utf-8").write(treeExplainerReturning(axiomsAST))
+        #     raise Exception(f"Got exception during evaluation (input was the printed in delete-exception-options/equivalence.txt): >>>{e}<<<")
         
         print(f"...evaluation result is >>>{evaluation}<<<")
         if evaluation == [False]:
@@ -373,19 +500,24 @@ def check_lines(lines: list[str], model: Model, options: list[str]):
                 fo.write(treeExplainerReturning(axiomsAST))
             print(f"Above should have appeared an explanation of why >>>{axiom_text}<<< is False. See also the local file 'explanation.txt' in case the generated explanation does not fit the screen")
             break #TODO
-        else:
+        elif evaluation == [True]:
             axioms_true += 1
-    print(f"Axioms analysis ended. Found {axioms_true}/{axioms_true+axioms_false} true axioms and {axioms_false}/{axioms_true+axioms_false} false axioms.")
+        else:
+            print(f"This axiom was evaluated to >>>{evaluation}<<<. This should not happen.")
+            axioms_unexpected += 1
+    print(f"Axioms analysis ended. Found {axioms_true}/{axioms_true+axioms_false+axioms_unexpected} true axioms and {axioms_false}/{axioms_true+axioms_false+axioms_unexpected} false axioms.")
     if axioms_false > 0:
-        print(f"Some axioms were evaluated as false. Check printed output for information on which they were and why they were evaluated as false. See also the local file 'explanation.txt' in case the generated explanation does not fit the screen.")
+        print(f"Some axioms ({axioms_false}) were evaluated as false. Check printed output for information on which they were and why they were evaluated as false. See also the local file 'explanation.txt' in case the generated explanation does not fit the screen.")
+    if axioms_unexpected > 0:
+        print(f"Some axioms ({axioms_unexpected}) were evaluated to an unexpected value. Check printed output for information on which they were and what they were evaluated to.")
 
-def check_model_against_axioms(model_file: str, axioms_file: str, options: list[str])->None:
+def check_model_against_axioms(model_file: str, axioms_file: str, options: list[str], timeout: int, timeout_aux: int, no_timeout: bool)->None:
     start1 = time.time()
     model = read_model_file(model_file)
     stop1 = time.time()
     
     start2 = time.time()
-    check_axioms_file(axioms_file, model, options)
+    check_axioms_file(axioms_file, model, options, timeout, timeout_aux, no_timeout)
     stop2 = time.time()
     print(f"To read model {stop1-start1} seconds were required")
     print(f"To check axioms {stop2-start2} seconds were required")
@@ -492,6 +624,9 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--model_file', type = str, help="Model file location")
     parser.add_argument('-a', '--axioms_file', type = str, help="Axiom file location")
     parser.add_argument('-o', '--options', type = str, nargs = "+", default = [], help="Options. Currently only 'equivalence' and 'range' are supported")
+    parser.add_argument('-t', '--timeout', type = int, default = 10, help="Timeout of the chosen strategy, in seconds. After the timeout the auxillary strategy will be called")
+    parser.add_argument('-taux', '--timeout_aux', type = int, default = 120, help="Timeout of the auxillary strategy, in seconds.")
+    parser.add_argument('-nout', '--no_timeout', type = bool, default = False, help="Deactivates the timeout system.")
     args = parser.parse_args()
-    print(args)
-    check_model_against_axioms(args.model_file, args.axioms_file, args.options)
+    check_model_against_axioms(args.model_file, args.axioms_file, args.options, args.timeout, args.timeout_aux, args.no_timeout)
+    #check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9\continuant-mereology_toUP.p9", ["range"])

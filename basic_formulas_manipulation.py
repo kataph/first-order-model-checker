@@ -1,5 +1,6 @@
 from functools import partialmethod
 import re
+from typing import Literal
 
 from lark import Tree, Token, Transformer
 from lark.visitors import Visitor, Interpreter, Discard
@@ -7,11 +8,26 @@ from lark.visitors import Visitor, Interpreter, Discard
 from model import prover9_parser, Signature, Model, P9ModelReader
 
 from PrettyPrint import PrettyPrintTree
+from PrettyPrint.Utils.Orientation import Orientation
+
 import ansi2html
 
 import logging
 my_logger = logging.getLogger("my_logger")
 logging.basicConfig(level=logging.INFO)
+
+def base_test(tests:list, func:callable, name:str):
+    for i, (inp, out) in enumerate(tests):
+        calc = func(inp)
+        assert calc == out, f"error at test {i}: from {inp} expected {out} got {ToString().visit(calc)}"
+        print(f"Test {i} is good!")
+    print(f"All good for {name}")
+def tree_test(tests:list, func:callable, name:str):
+    for i, (inp, out) in enumerate(tests):
+        calc = func(inp)
+        assert calc == prover9_parser.parse(out), f"error at test {i}: from {inp} (black/white) expected {out} (GREEN) got {calc} (RED) (String>>>{ToString().visit(calc)}<<<). {treeExplainer(prover9_parser.parse(inp))}, {treeExplainerGREEN(prover9_parser.parse(out))}, {treeExplainerRED(calc)}"
+        print(f"Test {i} is good!")
+    print(f"All good for {name}")
 
 
 BINARY_OPS = [
@@ -49,12 +65,15 @@ def getExplanation(x):
 
 from colorama import Back
 
-treeExplainer = PrettyPrintTree(getChildren, getExplanation, color="")
-treeExplainerRED = PrettyPrintTree(getChildren, getExplanation, color=Back.RED)
-treeExplainerGREEN = PrettyPrintTree(getChildren, getExplanation, color=Back.GREEN)
-treeExplainerYELLOW = PrettyPrintTree(getChildren, getExplanation, color=Back.YELLOW)
+treeExplainer = PrettyPrintTree(getChildren, getExplanation, color="", orientation=Orientation.Vertical)
+treeExplainerRED = PrettyPrintTree(getChildren, getExplanation, color=Back.RED, orientation=Orientation.Vertical)
+treeExplainerGREEN = PrettyPrintTree(getChildren, getExplanation, color=Back.GREEN, orientation=Orientation.Vertical)
+treeExplainerYELLOW = PrettyPrintTree(getChildren, getExplanation, color="", orientation=Orientation.Vertical)
 treeExplainerReturning = PrettyPrintTree(
     getChildren, getExplanation, return_instead_of_print=True, color=""
+)
+treeExplainerReturningNoExpl = PrettyPrintTree(
+    getChildren, getData, return_instead_of_print=True, color=""
 )
 treeExplainerReturningRED = PrettyPrintTree(
     getChildren, getExplanation, return_instead_of_print=True, color=Back.RED
@@ -81,15 +100,22 @@ text0 = (
 text6 = "all X A(X,Y,c2) ."
 text4 = "all X A(X,Y) & exists Z P(Z) ."
 text5 = "all X A(X,Y,c2) & P(X,Z,c) ."
-text3 = "all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l)."
 text2 = "all X A(X,Y,c2) | - exists Z P(X,Z,c) ."
 text2pre = "all X all Z A(X,Y,c2) | - P(X,Z,c) ."
 text1 = "all X all Y all Z all T all T2 A(X,Y,T) & A(Y,Z,T2) & B(T,T2) -> A(X,Z,T) ."
 text7 = "all A all B all C all T all T2  ((((properContinuantPartOf(A,B,T)) & (properContinuantPartOf(B,C,T2)) & (temporalPartOf(T,T2)))) -> (properContinuantPartOf(A,C,T))) # label(\"proper-continuant-part-of-transitive-at-a-time\")."
 text7 = "all A (B(A)) # label(\"proper-continuant-part-of-transitive-at-a-time\")."
+text7 = "all P all Q all R  ((((existsAt(P,Q)) & (continuantPartOf(R,P,Q)))) -> (existsAt(R,Q)))."
+text7 = "all P all Q all R  ((((eXistsAt(P,Q)) & (continuantPartOf(R,P,Q)))) -> (eXistsAt(R,Q)))."
+text3 = "all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l)."
+text3 = "all X all Y ((X) = (Y))."
+text3 = "all X all Y X = Y."
 
 
 
+
+# ast = prover9_parser.parse(text3)
+# treeExplainer(ast)
 # ast = prover9_parser.parse(text7)
 # treeExplainer(ast)
 # # treeExplainer(RemoveLines().transform(ast))
@@ -102,8 +128,8 @@ class ToString(Interpreter):
 
     def print_binary_op(self, tree, op: str):
         left, right = tree.children
-        yes_left_par = left.data not in ["predicate", "equality_atom"]
-        yes_right_par = right.data not in ["predicate", "equality_atom"]
+        yes_left_par = left.data not in ["predicate", "equality_atom", "negation", "negation_exc", "true", "false"]
+        yes_right_par = right.data not in ["predicate", "equality_atom", "negation", "negation_exc", "true", "false"]
         return (
             "(" * yes_left_par
             + self.visit(left)
@@ -127,7 +153,8 @@ class ToString(Interpreter):
 
     def negation(self, tree):
         negated_formula = tree.children[0]
-        return f"-({self.visit(negated_formula)})"
+        yes_neg_par = negated_formula.data not in ["predicate", "equality_atom", "true", "false"]
+        return "-"+"("*yes_neg_par+f"{self.visit(negated_formula)}"+")"*yes_neg_par
 
     negation_exc = negation
 
@@ -173,15 +200,9 @@ class ToString(Interpreter):
     def dom(self, tree):
         return f"dom({tree.children[0]})"
 
-    def pass_par_rule(self, tree, par: str):
-        return Tree(Token("RULE", par), self.visit_children(tree))
-
-    def pass_par(self, tree, par: str):
-        return Tree(par, self.visit_children(tree))
-
     def start(self, tree):
         return self.visit(tree.children[0])
-
+    
     def lines(self, tree):
         line_s: list = tree.children
         visited_line_s: list[str] = [self.visit(line) for line in line_s]
@@ -516,9 +537,13 @@ def dual_quantifier(string):
 def dual_op(string):
     op_map = {
         "existential_quantification": "universal_quantification",
+        "existential_quantification_exc": "universal_quantification",
         "universal_quantification": "existential_quantification",
+        "universal_quantification_exc": "existential_quantification",
         "conjunction": "disjunction",
+        "conjunction_exc": "disjunction",
         "disjunction": "conjunction",
+        "disjunction_exc": "conjunction",
         "false": "true",
         "true": "false",
     }
@@ -527,6 +552,159 @@ def dual_op(string):
             f"Operation should not be called to get dual. Operation was {string}"
         )
     return op_map[string]
+
+def pushdown_negation_interpreter(interpreter, tree):
+    negated_formula = tree.children[0]
+    if negated_formula.data in ["disjunction", "conjunction"]:
+        left, right = negated_formula.children
+        return Tree(
+            dual_op(negated_formula.data),
+            [
+                Tree("negation", [interpreter.visit(left)]),
+                Tree("negation", [interpreter.visit(right)]),
+            ],
+        )
+    if negated_formula.data in ["negation", "negation_exc"]:
+        sub_negated_formula = negated_formula.children[0]
+        return interpreter.visit(sub_negated_formula)
+    if negated_formula.data in ["true", "false"]:
+        return Tree(dual_op(negated_formula.data), [])
+    return Tree("negation", interpreter.visit_children(tree))
+
+
+def pushdown_negation_transformer(transformer, children):
+    negated_formula = children[0]
+    if negated_formula.data in ["disjunction", "conjunction"]:
+        left, right = negated_formula.children
+        return Tree(
+            dual_op(negated_formula.data),
+            [
+                Tree("negation", [left]),
+                Tree("negation", [right]),
+            ],
+        )
+    if negated_formula.data in ["negation", "negation_exc"]:
+        sub_negated_formula = negated_formula.children[0]
+        return sub_negated_formula
+    if negated_formula.data in ["true", "false"]:
+        return Tree(dual_op(negated_formula.data), [])
+    return Tree("negation", children)
+
+def pushdown_negation_transformer_general(transformer, children):
+    negated_formula = children[0]
+    if negated_formula.data in [
+        "existential_quantification",
+        "universal_quantification",
+        "existential_quantification_exc",
+        "universal_quantification_exc",
+    ]:
+        *quantified_variables, quantified_formula = negated_formula.children
+        return Tree(
+            dual_quantifier(negated_formula.data),
+            quantified_variables + [Tree("negation", [quantified_formula])],
+        )
+        
+    if negated_formula.data in [
+        "disjunction",
+        "disjunction_exc",
+        "conjunction",
+        "conjunction_exc",
+    ]:
+        return Tree(
+            dual_op(negated_formula.data),
+            [Tree("negation", [child]) for child in negated_formula.children],
+        )
+        
+    if negated_formula.data in [
+        "negation",
+        "negation_exc",
+    ]:
+        return negated_formula.children[0]
+    
+    if negated_formula.data in [
+        "entailment",
+        "entailment_exc",
+    ]:
+        pre, post = negated_formula.children
+        return Tree("conjunction", [pre, Tree("negation", post)])
+    
+    if negated_formula.data in [
+        "reverse_entailment",
+        "reverse_entailment_exc",
+    ]:
+        post, pre = negated_formula.children
+        return Tree("conjunction", [pre, Tree("negation", post)])
+    
+    if negated_formula.data in [
+        "equivalence_entailment",
+        "equivalence_entailment_exc",
+    ]:
+        pre, post = negated_formula.children
+        return Tree("disjunction",[Tree("conjunction", [pre, Tree("negation", post)]), Tree("conjunction", [post, Tree("negation", pre)])])
+    
+    if negated_formula.data in ["true", "false"]:
+        return Tree(dual_op(negated_formula.data), [])
+        
+    return Tree("negation", children)
+
+def pushdown_negation_interpreter_general(interpreter, tree):
+    children = tree.children
+    negated_formula = children[0]
+    if negated_formula.data in [
+        "existential_quantification",
+        "universal_quantification",
+        "existential_quantification_exc",
+        "universal_quantification_exc",
+    ]:
+        *quantified_variables, quantified_formula = negated_formula.children
+        return Tree(
+            dual_quantifier(negated_formula.data),
+            quantified_variables + [Tree("negation", [interpreter.visit(quantified_formula)])],
+        )
+        
+    if negated_formula.data in [
+        "disjunction",
+        "disjunction_exc",
+        "conjunction",
+        "conjunction_exc",
+    ]:
+        return Tree(
+            dual_op(negated_formula.data),
+            [Tree("negation", [interpreter.visit(child)]) for child in negated_formula.children],
+        )
+        
+    if negated_formula.data in [
+        "negation",
+        "negation_exc",
+    ]:
+        return interpreter.visit(negated_formula.children[0])
+    
+    if negated_formula.data in [
+        "entailment",
+        "entailment_exc",
+    ]:
+        pre, post = negated_formula.children
+        return Tree("conjunction", [interpreter.visit(pre), interpreter.visit(Tree("negation", post))])
+    
+    if negated_formula.data in [
+        "reverse_entailment",
+        "reverse_entailment_exc",
+    ]:
+        post, pre = negated_formula.children
+        return Tree("conjunction", [interpreter.visit(pre), interpreter.visit(Tree("negation", post))])
+    
+    if negated_formula.data in [
+        "equivalence_entailment",
+        "equivalence_entailment_exc",
+    ]:
+        pre, post = negated_formula.children
+        return Tree("disjunction",[Tree("conjunction", [interpreter.visit(pre), interpreter.visit(Tree("negation", post))]), Tree("conjunction", [interpreter.visit(post), interpreter.visit(Tree("negation", pre))])])
+    
+    if negated_formula.data in ["true", "false"]:
+        return Tree(dual_op(negated_formula.data), [])
+        
+    return Tree("negation", interpreter.visit_children(tree))
+
 
 
 class ReplaceVariable(Interpreter):
@@ -876,13 +1054,39 @@ class ToPrenex(Transformer):
     # sentence = car
 
     # label = lambda self, items: None
+class ToNNF(Transformer):
+    """Transform a formula in negation normal form"""
 
+    def __init__(self, visit_tokens=True):
+        super().__init__(visit_tokens)
+        self.unique = ToUniqueVariables()
+        self.reducer = ReduceLogicalSignature()
 
+    def adjust_transform_repeatedly(self, tree):
+        adjusted_tree = self.unique.adjust_variables(self.reducer.visit_repeatedly(tree))
+        oldtree = adjusted_tree
+        newtree = self.unique.adjust_variables(self.transform(adjusted_tree))
+        while newtree != oldtree:
+            oldtree = newtree
+            newtree = self.unique.adjust_variables(self.transform(oldtree))
+        return newtree
+
+    negation = negation_exc = pushdown_negation_transformer_general
+
+def test_NNF():
+    tests = [
+        ("(-(all A all B A(A) & B(B))).", "(exists A (exists B (-A(A) | -B(B)))).")
+    ]
+    base_test(tests, lambda inp: ToString().visit(ToNNF().adjust_transform_repeatedly(prover9_parser.parse(inp))), name = "NNF")
+    
+# test_NNF()
+# exit()
 # tp=ToPrenex()
 # textp = 'all X (exists Y R(X,Y)) & (exists Z P(X,Z)).'
 # textp = '((all X (exists Y R(X,Y))) & (all X(exists Z P(X,Z)))).'
 # textp = '((exists X (all Y R(X,Y))) | (exists X (all Z P(X,Z)))).'
 # textp = '((all X (exists Y R(X,Y))) | (all X(exists Z P(X,Z)))).'
+# textp = 'all A all B  ((((exists T  (((instanceOf(A,objectAggregate,T)) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) & (all T  ((continuantPartOf(A,B,T)) <-> (continuantPartOf(B,A,T)))))) -> ((A) = (B))).'
 # astp=prover9_parser.parse(textp)
 # treeExplainer(astp)
 # treeExplainer(tp.adjust_transform_repeatedly(astp))
@@ -909,12 +1113,7 @@ class ToPrenex(Transformer):
 # s()
 
 
-class ToConjunctiveNormalForm(Interpreter):
-    """Transform a propositional formula in conjunctive normal form. Non propositional operators are ignored"""
-
-    # def __init__(self, visit_tokens = True):
-    #     super().__init__(visit_tokens)
-
+class InterpreterUntilFixedPoint(Interpreter):
     def visit_repeatedly(self, tree):
         oldtree = tree
         newtree = self.visit(oldtree)
@@ -922,45 +1121,21 @@ class ToConjunctiveNormalForm(Interpreter):
             oldtree = newtree
             newtree = self.visit(oldtree)
         return newtree
-
+    
+class ReduceLogicalSignature(InterpreterUntilFixedPoint):
+    """Reduces the logical signature to just conjunction, disjunction, negation, and existential and univeral quantifiers"""
     def entailment(self, tree):
         left, right = tree.children
         return Tree(
             "disjunction", [Tree("negation", [self.visit(left)]), self.visit(right)]
         )
-
     entailment_exc = entailment
 
     def reverse_entailment(self, tree):
         left, right = tree.children
         return self.entailment([right, left])
-
     equivalence_entailment_exc = reverse_entailment
-
-    def disjunction(self, tree):
-        left, right = tree.children
-        if right.data == "conjunction":
-            sub_left, sub_right = right.children
-            return Tree(
-                "conjunction",
-                [
-                    Tree("disjunction", [self.visit(left), self.visit(sub_left)]),
-                    Tree("disjunction", [self.visit(left), self.visit(sub_right)]),
-                ],
-            )
-        if left.data == "conjunction":
-            sub_left, sub_right = left.children
-            return Tree(
-                "conjunction",
-                [
-                    Tree("disjunction", [self.visit(right), self.visit(sub_left)]),
-                    Tree("disjunction", [self.visit(right), self.visit(sub_right)]),
-                ],
-            )
-        return Tree("disjunction", self.visit_children(tree))
-
-    disjunction_exc = disjunction
-
+    
     def equivalence_entailment(self, tree):
         left, right = tree.children
         return Tree(
@@ -970,70 +1145,129 @@ class ToConjunctiveNormalForm(Interpreter):
                 Tree("entailment", [self.visit(right), self.visit(left)]),
             ],
         )
-
     equivalence_entailment_exc = equivalence_entailment
-
-    def false(self, tree):
-        return Tree("false", [])
-
-    def true(self, tree):
-        return Tree("true", [])
-
-    def negation(self, tree):
-        negated_formula = tree.children[0]
-        if negated_formula.data in ["disjunction", "conjunction"]:
-            left, right = negated_formula.children
-            return Tree(
-                dual_op(negated_formula.data),
-                [
-                    Tree("negation", [self.visit(left)]),
-                    Tree("negation", [self.visit(right)]),
-                ],
-            )
-        if negated_formula.data in ["negation", "negation_exc"]:
-            sub_negated_formula = negated_formula.children[0]
-            return self.visit(sub_negated_formula)
-        if negated_formula.data in ["true", "false"]:
-            return Tree(dual_op(negated_formula.data), [])
-        return Tree("negation", self.visit_children(tree))
-
-    negation_exc = negation
-
-    def pass_par_rule(self, tree, par: str):
-        return Tree(Token("RULE", par), self.visit_children(tree))
-
-    def pass_par(self, tree, par: str):
-        return Tree(par, self.visit_children(tree))
 
     def terminate(self, tree):
         return tree
 
-    start = partialmethod(pass_par_rule, par="start")
-    lines = partialmethod(pass_par_rule, par="lines")
-    line = partialmethod(pass_par_rule, par="line")
-    conjunction = partialmethod(pass_par, par="conjunction")
-    universal_quantification = partialmethod(pass_par, par="universal_quantification")
-    existential_quantification = partialmethod(
-        pass_par, par="existential_quantification"
-    )
-    universal_quantification_bounded = partialmethod(
-        pass_par, par="universal_quantification_bounded"
-    )
-    existential_quantification_bounded = partialmethod(
-        pass_par, par="existential_quantification_bounded"
-    )
-    # def universal_quantification(self, tree):
-    #     return Tree("universal_quantification", [])
+    def conjunction(self, tree):
+        absorbing_element = {"disjunction": "true", "conjunction": "false"}
+        neutral_element = {"disjunction": "false", "conjunction": "true"}
+        if any(child.data == absorbing_element[tree.data] for child in tree.children):
+            return Tree(absorbing_element[tree.data], [])
+        if any(child.data == neutral_element[tree.data] for child in tree.children) and any(child.data != neutral_element[tree.data] for child in tree.children):
+            return Tree(tree.data, [self.visit(child) for child in tree.children if child.data != neutral_element[tree.data]])
+        if any(x==y and i!=j for i,x in enumerate(tree.children) for j,y in enumerate(tree.children)): # gonna touch the list only if necessary
+            return Tree(tree.data, [self.visit(child) for child in list(set(tree.children))])
+        if len(tree.children) == 1:
+            return self.visit(tree.children[0])
+        return Tree(tree.data, self.visit_children(tree))
+    disjunction = conjunction
+
     predicate = terminate
     equality_atom = terminate
     dom = terminate
     cond = terminate
     empty = terminate
     VARIABLE = terminate
-    # start = proceeds #pass_car
-    # lines = proceeds #pass_by
-    # line = proceeds #visit_self
+    false = terminate
+    true = terminate
+    
+    def __default__(self, tree):
+        return Tree(tree.data, self.visit_children(tree))
+    
+def pushdown_binary_op(self, tree, param: Literal["conjunction", "disjunction"]):
+    # left, right = tree.children
+    # if right.data == param:
+    #     sub_left, sub_right = right.children
+    #     return Tree(
+    #             param,
+    #             [
+    #                 Tree(dual_op(param), [self.visit(left), self.visit(sub_left)]),
+    #                 Tree(dual_op(param), [self.visit(left), self.visit(sub_right)]),
+    #             ],
+    #         )
+    # if left.data == param:
+    #     sub_left, sub_right = left.children
+    #     return Tree(
+    #             param,
+    #             [
+    #                 Tree(dual_op(param), [self.visit(sub_left), self.visit(right)]),
+    #                 Tree(dual_op(param), [self.visit(sub_right), self.visit(right)]),
+    #             ],
+    #         )
+    
+    # First thing first: duplicates and base cases are removed
+    absorbing_element = {"disjunction": "true", "conjunction": "false"}
+    neutral_element = {"disjunction": "false", "conjunction": "true"}
+    if any(child.data == absorbing_element[param] for child in tree.children):
+        return Tree(absorbing_element[param], [])
+    if any(child.data == neutral_element[param] for child in tree.children) and any(child.data != neutral_element[param] for child in tree.children):
+        return Tree(param, [self.visit(child) for child in tree.children if child.data != neutral_element[param]])
+    if any(x==y and i!=j for i,x in enumerate(tree.children) for j,y in enumerate(tree.children)): # gonna touch the list only if necessary
+        return Tree(param, [self.visit(child) for child in list(set(tree.children))])
+    if len(tree.children) == 1:
+        return self.visit(tree.children[0])
 
+    # This works for ennary operations
+    if any(child.data == dual_op(param) for child in tree.children):
+        op_child = next(child for child in tree.children if child.data == dual_op(param))
+        return Tree(
+                dual_op(param),
+                [
+                    Tree(param, [self.visit(child) if child != op_child else self.visit(sub_child) for child in tree.children]) for sub_child in op_child.children
+                ]
+        )
+    return Tree(param, self.visit_children(tree))
+
+class ToDisjunctiveNormalForm(ReduceLogicalSignature):
+    """Transform a propositional formula in disjunctive normal form. Non propositional operators are ignored"""
+    conjunction_exc = conjunction = partialmethod(pushdown_binary_op, param = "conjunction")
+
+    negation = negation_exc = pushdown_negation_interpreter_general
+
+class ToConjunctiveNormalForm(ReduceLogicalSignature):
+    """Transform a propositional formula in conjunctive normal form. Non propositional operators are ignored"""
+    disjunction_exc = disjunction = partialmethod(pushdown_binary_op, param = "disjunction")
+
+    negation = negation_exc = pushdown_negation_interpreter_general
+
+
+def test_reduce_logical_signature():
+    tests = [
+        ("(A(X) -> B(X)).", "(-A(X) | B(X))."),
+        ("(A(X) <-> B(X)).", "((-A(X) | B(X)) & (-B(X) | A(X)))."),
+        ("(A(X) & A(X)).", "(A(X))."),
+        ("(A(X) & A(X) & A(X)).", "(A(X))."),
+    ]
+    base_test(tests, lambda inp: ToString().visit(ReduceLogicalSignature().visit_repeatedly(prover9_parser.parse(inp))), "reduce logical signature")
+
+def test_toCNF():
+    tests = [
+        ("((A(X) & A(X)) | C(X)).", "(A(X) | C(X))."),
+        ("((A(X) & B(X)) | C(X)).", "((A(X) | C(X)) & (B(X) | C(X)))."),
+        ("((A(X) & B(X)) | exists X C(X)).", "((A(X) | (exists X (C(X)))) & (B(X) | (exists X (C(X)))))."),
+        ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).", "(all X (all T (-instanceOf(X,fiatLine,T) | (exists S (exists TP ((temporalPartOf(TP,T) & occupiesSpatialRegion(X,S,TP)) & instanceOf(S,oneDimensionalSpatialRegion,TP)))))))."),
+    ]
+    func = lambda inp: ToString().visit(ToConjunctiveNormalForm().visit_repeatedly(prover9_parser.parse(inp)))
+    name = "toCNF"
+    base_test(tests, func, name)
+
+def test_toDNF():
+    tests = [
+        ("((A(X) | B(X)) & C(X)).", "((A(X) & C(X)) | (B(X) & C(X)))."),
+        ("((A(X) | B(X)) & (C(X) | D(X))).", "(((A(X) & C(X)) | (A(X) & D(X))) | ((B(X) & C(X)) | (B(X) & D(X))))."),
+        ("((A(X) | B(X)) & (C(X) | True)).", "(A(X) | B(X))."),
+        ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).", "(all X (all T (-instanceOf(X,fiatLine,T) | (exists S (exists TP ((temporalPartOf(TP,T) & occupiesSpatialRegion(X,S,TP)) & instanceOf(S,oneDimensionalSpatialRegion,TP)))))))."),
+    ]
+    func = lambda inp: ToString().visit(ToDisjunctiveNormalForm().visit_repeatedly(prover9_parser.parse(inp)))
+    name = "toDNF"
+    base_test(tests, func, name)
+     
+# test_reduce_logical_signature()
+# test_toCNF()
+# test_toDNF()
+# exit()
 
 class ToPrenexCNF:
     """Transform a formula in prenex conjunctive normal form."""
@@ -1050,6 +1284,40 @@ class ToPrenexCNF:
             oldtree = newtree
             newtree_pre = self.toPrenex.adjust_transform_repeatedly(oldtree)
             newtree = self.toCNF.visit_repeatedly(newtree_pre)
+        return newtree
+
+class ToPrenexDNF:
+    """Transform a formula in prenex disjunctive normal form."""
+
+    def __init__(self):
+        self.toPrenex = ToPrenex()
+        self.toDNF = ToDisjunctiveNormalForm()
+
+    def transform_repeatedly(self, tree):
+        oldtree = tree
+        newtree_pre = self.toPrenex.adjust_transform_repeatedly(oldtree)
+        newtree = self.toDNF.visit_repeatedly(newtree_pre)
+        while newtree != oldtree:
+            oldtree = newtree
+            newtree_pre = self.toPrenex.adjust_transform_repeatedly(oldtree)
+            newtree = self.toDNF.visit_repeatedly(newtree_pre)
+        return newtree
+
+class ToPrenexNNF:
+    """Transform a formula in prenex negation normal form."""
+
+    def __init__(self):
+        self.toPrenex = ToPrenex()
+        self.toNNF = ToNNF()
+
+    def transform_repeatedly(self, tree):
+        oldtree = tree
+        newtree_pre = self.toPrenex.adjust_transform_repeatedly(oldtree)
+        newtree = self.toNNF.adjust_transform_repeatedly(newtree_pre)
+        while newtree != oldtree:
+            oldtree = newtree
+            newtree_pre = self.toPrenex.adjust_transform_repeatedly(oldtree)
+            newtree = self.toNNF.adjust_transform_repeatedly(newtree_pre)
         return newtree
 
 
@@ -1073,14 +1341,11 @@ class ToPrenexCNF:
 # quit()
 
 
-class ToReversePrenexCNF(Transformer):
-    """Transform a formula in prenex CNF and transforms it in reverse prenex CNF normal form (push quantifiers in the innermost position possible -- if it is immediate to do so)
-    If the formula is not prenex CNF it will be made so before starting"""
+class ToReversePrenex(Transformer):
 
     def __init__(self, visit_tokens=True):
         super().__init__(visit_tokens)
         self.freeVars = P9FreeVariablesExtractor()
-        self.toPCNF = ToPrenexCNF()
         self.stringer = ToString()
         self.unique = ToUniqueVariables()
         self.commutes = {
@@ -1089,16 +1354,9 @@ class ToReversePrenexCNF(Transformer):
         }
 
     def adjust_transform_repeatedly(self, tree):
-        # ensures the tree is PCNF
-        PCNFtree = self.toPCNF.transform_repeatedly(tree)
-        if PCNFtree != tree:
-            my_logger.debug(f"As an input of ToReversePrenexCNF I got a formula not in PCNF. Precisely {self.stringer.visit(tree)}. I have transformed it in PCNF: the formula is now {self.stringer.visit(PCNFtree)}.")
-
-        adjusted_tree = self.unique.adjust_variables(PCNFtree)
-        oldtree = adjusted_tree
-        newtree = self.unique.adjust_variables(self.transform(adjusted_tree))
+        oldtree = self.unique.adjust_variables(tree)
+        newtree = self.unique.adjust_variables(self.transform(oldtree))
         while newtree != oldtree:
-            # print("I am transforming an additional time")
             oldtree = newtree
             newtree = self.unique.adjust_variables(self.transform(oldtree))
         return newtree
@@ -1152,14 +1410,57 @@ class ToReversePrenexCNF(Transformer):
         quantification, quantification_type="universal_quantification"
     )
 
-    def negation_exc(self, children):
-        negated_formula = children[0]
-        if negated_formula.data in ["negation", "negation_exc"]:
-            doubly_negated_formula = negated_formula.children[0]
-            return doubly_negated_formula
-        return Tree("negation", children)
-
+    negation_exc = pushdown_negation_transformer
     negation = negation_exc
+    
+class ToReversePrenexCNF(ToReversePrenex):
+    """Transform a formula in prenex CNF and transforms it in reverse prenex CNF normal form (push quantifiers in the innermost position possible -- if it is immediate to do so)
+    If the formula is not prenex CNF it will be made so before starting"""
+
+    def __init__(self, visit_tokens=True):
+        super().__init__(visit_tokens)
+        self.toPCNF = ToPrenexCNF()
+
+    def adjust_transform_repeatedly(self, tree):
+        # ensures the tree is PCNF
+        PCNFtree = self.toPCNF.transform_repeatedly(tree) 
+        if PCNFtree != tree:
+            my_logger.debug(f"As an input of ToReversePrenexCNF I got a formula not in PCNF. Precisely {self.stringer.visit(tree)}. I have transformed it in PCNF: the formula is now {self.stringer.visit(PCNFtree)}.")
+
+        adjusted_tree = self.unique.adjust_variables(PCNFtree)
+        oldtree = adjusted_tree
+        newtree = self.unique.adjust_variables(self.transform(adjusted_tree))
+        while newtree != oldtree:
+            # print("I am transforming an additional time")
+            oldtree = newtree
+            newtree = self.unique.adjust_variables(self.transform(oldtree))
+        return newtree
+
+class ToReversePrenexNNF(ToReversePrenex):
+    """Transform a formula in prenex NNF and transforms it in reverse prenex NNF normal form (push quantifiers in the innermost position possible -- if it is immediate to do so)
+    If the formula is not prenex NNF it will be made so before starting"""
+
+    def __init__(self, visit_tokens=True):
+        super().__init__(visit_tokens)
+        self.toPNNF = ToPrenexNNF()
+
+    def adjust_transform_repeatedly(self, tree):
+        # ensures the tree is PNNF
+        PNNFtree = self.toPNNF.transform_repeatedly(tree) 
+        if PNNFtree != tree:
+            my_logger.debug(f"As an input of ToReversePrenexNNF I got a formula not in PNNF. Precisely {self.stringer.visit(tree)}. I have transformed it in PCNF: the formula is now {self.stringer.visit(PNNFtree)}.")
+
+        adjusted_tree = self.unique.adjust_variables(PNNFtree)
+        oldtree = adjusted_tree
+        newtree = self.unique.adjust_variables(self.transform(adjusted_tree))
+        while newtree != oldtree:
+            # print("I am transforming an additional time")
+            oldtree = newtree
+            newtree = self.unique.adjust_variables(self.transform(oldtree))
+        return newtree
+
+    
+
 
 
 # tp=ToReversePrenexCNF()
@@ -1179,7 +1480,14 @@ class ToReversePrenexCNF(Transformer):
 # treeExplainerRED(tp.adjust_transform_repeatedly(astp))
 # exit()
 
-class ToMiniscopedCNF(Transformer):
+def remove_double_negation(self, children):
+    negated_formula = children[0]
+    if negated_formula.data in ["negation", "negation_exc"]:
+        doubly_negated_formula = negated_formula.children[0]
+        return doubly_negated_formula
+    return Tree("negation", children)
+
+class ToMiniscopedPCNF(Transformer):
     """Transform a formula in prenex CNF and transforms it in reverse prenex CNF normal form (push quantifiers in the innermost position possible -- if it is immediate to do so)
     If the formula is not prenex CNF it will be made so before starting"""
 
@@ -1187,6 +1495,7 @@ class ToMiniscopedCNF(Transformer):
         super().__init__(visit_tokens)
         self.freeVars = P9FreeVariablesExtractor()
         self.toPCNF = ToPrenexCNF()
+        self.preliminary_transform = self.toPCNF.transform_repeatedly
         self.commutes = {
             "existential_quantification": "disjunction",
             "universal_quantification": "conjunction",
@@ -1197,7 +1506,7 @@ class ToMiniscopedCNF(Transformer):
 
     def adjust_transform_repeatedly(self, tree):
         # ensures the tree is PCNF
-        PCNFtree = self.toPCNF.transform_repeatedly(tree)
+        PCNFtree = self.preliminary_transform(tree)
         # ensures variable name uniqueness
         UniquePNCFtree = self.unique.adjust_variables(PCNFtree)
         # ensures the tree is associatively-flattened
@@ -1318,19 +1627,45 @@ class ToMiniscopedCNF(Transformer):
         quantification, quantification_type="universal_quantification"
     )
 
-    def negation_exc(self, children):
-        negated_formula = children[0]
-        if negated_formula.data in ["negation", "negation_exc"]:
-            doubly_negated_formula = negated_formula.children[0]
-            return doubly_negated_formula
-        return Tree("negation", children)
+    negation = negation_exc = remove_double_negation
+class ToMiniscopedPNNF(ToMiniscopedPCNF):
+    """Transform a formula in PNNF and transforms it in miniscoped negation normal form (push quantifiers in the innermost position possible)
+    If the formula is not PNNF it will be made so before starting"""
 
-    negation = negation_exc
+    def __init__(self, visit_tokens=True):
+        super().__init__(visit_tokens)
+        self.toPNNF = ToPrenexNNF()
+        self.preliminary_transform = self.toPNNF.transform_repeatedly
 
+class ToMiniscopedPDNF(ToMiniscopedPCNF):
+    """Transform a formula in PDNF and transforms it in miniscoped negation normal form (push quantifiers in the innermost position possible)
+    If the formula is not PDNF it will be made so before starting"""
+
+    def __init__(self, visit_tokens=True):
+        super().__init__(visit_tokens)
+        self.toPDNF = ToPrenexDNF()
+        self.preliminary_transform = self.toPDNF.transform_repeatedly
+
+
+class ToMiniscopedCNF(ToMiniscopedPCNF):
+    def __init__(self, visit_tokens=True):
+        super().__init__(visit_tokens)
+        self.toCNF = ToConjunctiveNormalForm()
+        self.preliminary_transform = self.toCNF.visit_repeatedly
+class ToMiniscopedDNF(ToMiniscopedPCNF):
+    def __init__(self, visit_tokens=True):
+        super().__init__(visit_tokens)
+        self.toDNF = ToDisjunctiveNormalForm()
+        self.preliminary_transform = self.toDNF.visit_repeatedly
+class ToMiniscopedNNF(ToMiniscopedPCNF):
+    def __init__(self, visit_tokens=True):
+        super().__init__(visit_tokens)
+        self.toNNF = ToNNF()
+        self.preliminary_transform = self.toNNF.adjust_transform_repeatedly
 
 
 def test_miniscoping():    
-    tp=ToMiniscopedCNF()
+    tp=ToMiniscopedPCNF()
     textp = 'all X (exists Y R(X,Y)) & (exists Z P(X,Z)).'
     textp = '((all X (exists Y R(X,Y))) & (all X(exists Z P(X,Z)))).'
     textp = '((exists X (all Y R(X,Y))) | (exists X (all Z P(X,Z)))).'
@@ -1338,29 +1673,42 @@ def test_miniscoping():
     textp = '(all X exists Y (R(X,Y) | P(X,Z))).'
     textp = '(exists X - all Y (R(X,Y) |  P(X,Z))).'
 
-    tests = [("(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T)).","(all Y (all Z (all T ((all TAU ((-(cP(Y,Z,TAU))) | (-(tP(T,TAU))))) | (all X ((-(cP(X,Y,T))) | cP(X,Z,T)))))))."),
+    tests = [
+            ("(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T)).","(all Y (all Z (all T ((all TAU ((-(cP(Y,Z,TAU))) | (-(tP(T,TAU))))) | (all X ((-(cP(X,Y,T))) | cP(X,Z,T)))))))."),
             ("(all X all Y (C(Y) & (A(X) | B(X,Y)))).","((all Y (C(Y))) & (all X (A(X) | (all Y1 (B(X,Y1))))))."),
             ("(all X all Y A(X) & B(X,Y)).","((all X (A(X))) & (all X1 (all Y (B(X1,Y)))))."),
             ("(all X all Y (A(X) | B(X,Y))).","(all X (A(X) | (all Y (B(X,Y)))))."),
             ("(all Y (C(Y) | (A(X) | B(X,Y)))).","(A(X) | (all Y (C(Y) | B(X,Y))))."),
-            ("(all X -( A(X) | False)).","((True) & (-(exists X (A(X)))))."),
+            ("(all X -( A(X) | False)).","(-(exists X A(X)))."),#"((True) & (-(exists X (A(X)))))."),
             ("(all X all Y (C(Y) | (A(X) & B(X,Y)))).", "(((all X (A(X))) | (all Y (C(Y)))) & (all Y1 (C(Y1) | (all X1 (B(X1,Y1))))))."),
             ("(all X all Y (C(Y) & (A(X) | B(X,Y)))).","((all Y (C(Y))) & (all X (A(X) | (all Y1 (B(X,Y1))))))."),
+            # ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).","((all Y (C(Y))) & (all X (A(X) | (all Y1 (B(X,Y1))))))."),
+            ("all A all B  ((((exists T  (((instanceOf(A,objectAggregate,T)) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) & (all T  ((continuantPartOf(A,B,T)) <-> (continuantPartOf(B,A,T)))))) -> ((A) = (B))).", 
+             "all A all B  ((((exists T  (((instanceOf(A,objectAggregate,T)) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) & (all T  ((continuantPartOf(A,B,T)) <-> (continuantPartOf(B,A,T)))))) -> ((A) = (B)))."),
             ]
-    for test in tests:
-        miniscoped = ToMiniscopedCNF().adjust_transform_repeatedly(prover9_parser.parse(test[0]))
-        ground = prover9_parser.parse(test[1])
-        assert miniscoped == ground, [treeExplainerRED(miniscoped), treeExplainerGREEN(ground)]
-        
-    textp = '(all X all Y (R(X,Y) | P(Y))).'
-    astp=prover9_parser.parse(textp)
-    treeExplainerGREEN(astp)
-    treeExplainer(ToReversePrenexCNF().adjust_transform_repeatedly(astp))
-    treeExplainerRED(tp.adjust_transform_repeatedly(astp))
-    print(ToString().visit(tp.adjust_transform_repeatedly(astp)))
+    
+    # tree_test(tests, lambda inp: ToMiniscopedPCNF().adjust_transform_repeatedly(prover9_parser.parse(inp)), "miniscoping")
+    # tree_test(tests, lambda inp: ToMiniscopedPNNF().adjust_transform_repeatedly(prover9_parser.parse(inp)), "miniscoping")
+    
+    # treeExplainerRED(ToMiniscopedPDNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0])))
+    open("deletePCNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedPCNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
+    open("deletePNNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedPNNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
+    # open("deletePPNNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToPrenex().adjust_transform_repeatedly(ToMiniscopedPNNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0])))))
+    # open("deletePPNNF2.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedPNNF().adjust_transform_repeatedly(ToPrenex().adjust_transform_repeatedly(ToMiniscopedPNNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))))
+    open("deletePDNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedPDNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
+    open("deleteCNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedCNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
+    open("deleteNNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedNNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
+    open("deleteDNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedDNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
+    print("writen some files")
 
+# test_miniscoping()
+# exit()
 
-
+# ast = prover9_parser.parse("(exists Q exists P cP(P,Q,T) & (i(P,sR,T)|i(Q,sR,T))).")
+# open("deleteMNNF.txt","w",encoding="utf-8").write(treeExplainerReturning(ToMiniscopedNNF().adjust_transform_repeatedly(ast)))
+# open("deleteMCNF.txt","w",encoding="utf-8").write(treeExplainerReturning(ToMiniscopedCNF().adjust_transform_repeatedly(ast)))
+# open("deleteMDNF.txt","w",encoding="utf-8").write(treeExplainerReturning(ToMiniscopedDNF().adjust_transform_repeatedly(ast)))
+# exit()
 
 def test_to_string():
     tos = ToString()
