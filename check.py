@@ -1,3 +1,4 @@
+from copy import deepcopy
 import multiprocessing.pool
 # import multiprocessing
 # import multiprocess as multiprocessing
@@ -123,7 +124,8 @@ class P9Evaluator(Interpreter):
         if not set(options) <= POSSIBLE_OPTIONS: raise AssertionError(f"Called with options={options}, but options can only be {POSSIBLE_OPTIONS}")
         if "equivalence" in options:
             self.p9extractor = P9FreeVariablesExtractor()
-            self.equivalences = {frozenset({"="}):[set(model.signature.constants)]} # Equality is added since the way the models are written every costant is '='-equivalent
+            #self.equivalences = {frozenset({"="}):[set(model.signature.constants)]} # Equality is added since the way the models are written every costant is '='-equivalent <-- NOO!!! since they are all different w.r.to equality the equivalence classes must be singleton. Also note that this likely renders the equivalence strategy useless in the case of axioms containing '='.
+            self.equivalences = {frozenset({"="}):[set({constant}) for constant in model.signature.constants]} # This is the correct version
             for predicate in self.model.signature.predicates: 
                 self.equivalences.update({frozenset({predicate}): find_equivalent(self.model.ordered_truth_table[predicate], self.model)})
         if "range" in options:
@@ -142,8 +144,7 @@ class P9Evaluator(Interpreter):
         if not predicates_fset in self.equivalences:
             classes = intersects_equivalence_classes([[clazz.copy() for clazz in self.equivalences[frozenset({pred})]] for pred in predicates_in_scope], self.model)
             self.equivalences[predicates_fset] = classes
-        else:
-            classes = [clazz.copy() for clazz in self.equivalences[predicates_fset]] 
+        classes = [clazz.copy() for clazz in self.equivalences[predicates_fset]] # I must take copies otherwise I could modify the self.equivalence dictionary
         # now, if there are constants in the axiom coming either by the original axiom or by some subsequent substution, they must be removed from non-singleton equivalence classes and added to singletons
         set_constants = set(axiom_signature.constants).union(set(substitutions.values()))
         for clazz in classes:
@@ -163,9 +164,8 @@ class P9Evaluator(Interpreter):
     def evaluate(self, tree: Tree):
         self.original_tree = tree
         ret = self.visit(tree)
-        self.visited_tree = tree
         if ret == None:
-            raise TypeError("This should not happen!")
+            raise TypeError("Evaluation returned None. This should not happen!")
         return ret
     # this way I ensure I can visit with some input data
     def visit_with_memory(self, tree, additional_data = {}):
@@ -206,14 +206,15 @@ class P9Evaluator(Interpreter):
             else:
                 self.boundEvaluator.ranged_variable = quantified_variable
                 bound_relation: Relation = self.boundEvaluator.transform(bounding_formula)
+                if len(bound_relation.tuple_header) == 0 and not (bound_relation.tuple_set == False or bound_relation.tuple_set == set()):
+                    raise TypeError(f"The relation {bounding_formula} was returned. The header is empty but the tuple set has an unexpected value")
                 if len(bound_relation.tuple_header) == 0 and bound_relation.tuple_set == False:
                     bound = set()
                 elif not (len(bound_relation.tuple_header) == 1 and bound_relation.tuple_header[0] == quantified_variable):
-                    open("delete-evaluated-bounding.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(bounding_formula))
-                    open("delete-visited.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(self.visited_tree))
-                    open("delete-evaluated.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(self.original_tree))
-                    open("delete-tree.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(tree))
-                    raise TypeError(f"In {quantification_type}, bounded formula evaluation returned an unexpected result: {bound_relation}. I've saved the tree received by the evaluator in delete-evaluated.txt and the bound being evaluated in delete-evaluated-bound.txt. The node in question is {tree} (printed to delete-tree.txt)")
+                    open("debug-evaluated-bounding.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(bounding_formula))
+                    open("debug-evaluated.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(self.original_tree))
+                    open("debug-tree.txt", "w", encoding="utf-8").write(treeExplainerReturningNoExpl(tree))
+                    raise TypeError(f"In some bounded {quantification_type} quantification node, the bounded formula evaluation returned an unexpected result: {bound_relation}. I've saved the tree as received by the evaluator in debug-evaluated.txt, and the bound being evaluated in debug-evaluated-bound.txt. The node in question is {tree} (printed to debug-tree.txt)")
                 else:
                     bound = {t[0] for t in bound_relation.tuple_set} # de-tuple the singleton tuples
                 self.tree_to_bound_map.update({bounding_formula:bound})
@@ -361,8 +362,8 @@ def read_model_file(model_file: str) -> Model:
         raise TypeError(f"Equality was found in the model. It should not be there, and instead all constants should be assumed to be different")
 
     print(f"...read model file. The model has {len(model.signature.constants)} constants and {len(model.signature.predicates)} predicates")
-    print(f"The model ordered table is >>> {model.ordered_truth_table}")
-    print(f"The model truth table is >>> {model.truth_table}")
+    #print(f"The model ordered table is >>> {model.ordered_truth_table}")
+    #print(f"The model truth table is >>> {model.truth_table}")
     return model
 
 # model = read_model_file("model.p9")
@@ -386,7 +387,7 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
     p9evaluator = P9Evaluator(model, options)
     p9evaluator_equivalence = P9Evaluator(model, ["equivalence"])
     p9explainer = P9Explainer()
-    p9remover = RemoveLabels()
+    p9LabelRemover = RemoveLabels()
     
     axioms_true = 0
     axioms_false = 0
@@ -401,7 +402,7 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
         if "set(prolog_style_variables)" in no_comment_line: #ignore setting options
             continue
         axiom_text = no_comment_line
-        axiomsAST: Tree = p9remover.transform((prover9_parser.parse(axiom_text)))
+        axiomsAST: Tree = p9LabelRemover.transform((prover9_parser.parse(axiom_text)))
         free_variables, axiom_signature = p9variables.extract_free_variables_and_signature(axiomsAST)
         if "=" in model.signature.predicates:
             raise TypeError(f"Equality was found in the model. It should not be there, and instead all constants should be assumed to be different")
@@ -416,9 +417,8 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
                 raise TypeError(f"An axiom was found with the predicate {predicate} of arity {arity}, but in the model the same predicate has arity {model.signature.predicates[predicate]}!")
 
 
-        print(f"evaluating >>>{axiom_text}<<< against given model...")
+        print(f"\nevaluating >>>{axiom_text}<<< against given model...")
         
-        axiomsAST_for_equivalence = axiomsAST
         
         # if "range" in options:
         #     # axiomsAST = ReduceLogicalSignature().visit_repeatedly(axiomsAST)
@@ -430,38 +430,43 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
             
             
         def f_equivalences(axiomsAST_for_equivalence, p9evaluator_equivalence):
-            print("Started f_equivalences")
+            print("Started a thread with the equivalence strategy")
             try:
                 evaluation = p9evaluator_equivalence.evaluate(axiomsAST_for_equivalence)
             except Exception as e:
                 raise TypeError(f"Got an exception during f_equivalences: >>>{e}<<<")
             return evaluation, axiomsAST#, f"Default parallel equivalence strategy was faster than the strategy called with the options {options}"
             
-        def f_options(axiomsAST, p9evaluator, toBMNNF, options):
-            print("Started f_options")
+        def f_options(axiomsAST_for_first_thread, p9evaluator, toBMNNF, options):
+            print(f"Started a thread with the strategy from the given options ({options})")
             try:
                 if "range" in options:
-                    axiomsAST = toBMNNF.adjust_transform_repeatedly(axiomsAST) # <- nukes on continuant-part-of-has-weak-supplementation-at-a-time
-                evaluation = p9evaluator.evaluate(axiomsAST)
+                    axiomsAST_for_first_thread = toBMNNF.adjust_transform_repeatedly(axiomsAST_for_first_thread) # <- nukes on continuant-part-of-has-weak-supplementation-at-a-time
+                evaluation = p9evaluator.evaluate(axiomsAST_for_first_thread)
             except Exception as e:
                 raise TypeError(f"Got an exception during f_option: >>>{e}<<<")
-            return evaluation, axiomsAST#, f"The strategy called with the options {options} was faster than the default equivalence strategy"
+            return evaluation, axiomsAST_for_first_thread#, f"The strategy called with the options {options} was faster than the default equivalence strategy"
         # try: 
 
             # future = run_fastest(f_equivalences, f_options)
             # evaluation, message
             # print(message)
             
-        timeout = 10
-        timeout_aux = 60
         
+        # within the different threads, the AST state will be modified during the evaluation procedure. If a thread is interrupted, the AST state will stay modified and feeding it to the second thread may lead to unexpected result. So I have to copy the AST, so I have two independent 'clean' copies on which the evaluation can start as from a blank slate.
+        
+        
+        timeoutOccurred = False
         if not no_timeout:
+            axiomsAST_for_first_thread = deepcopy(axiomsAST)
+            axiomsAST_for_equivalence = axiomsAST
             evaluation = "possible time out"
             try:
                 with multiprocessing.pool.ThreadPool() as pool:
-                    evaluation, axiomsAST_from_multithread = pool.apply_async(f_options, args=[axiomsAST, p9evaluator, toBoundedMinifiedNNF(), options]).get(timeout = timeout)
+                    evaluation, axiomsAST_from_multithread = pool.apply_async(f_options, args=[axiomsAST_for_first_thread, p9evaluator, toBoundedMinifiedNNF(), options]).get(timeout = timeout)
                     axiomsAST = axiomsAST_from_multithread
             except multiprocessing.TimeoutError:
+                timeoutOccurred = True
                 print("==="*50)
                 print("Timeout! passing to next strat")
                 print("==="*50)
@@ -480,6 +485,7 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
             except Exception as e:
                 raise TypeError(f"got from first strat {e}")
         else: 
+            print(f"Starting the strategy from the given options ({options}) without multithreading")
             evaluation = "not executed yet"
             evaluation = p9evaluator.evaluate(axiomsAST)
         
@@ -495,10 +501,14 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
             axioms_false += 1
             print(f"Evaluation of axiom >>>{axiom_text}<<< is False! Generating explanation...")
             #p9explainer.explain(axiomsAST)
-            treeExplainerRED(axiomsAST)
+            #treeExplainerRED(axiomsAST) <-- too big
             with open("explanation.txt", "w", encoding="utf-8") as fo:
                 fo.write(treeExplainerReturning(axiomsAST))
-            print(f"Above should have appeared an explanation of why >>>{axiom_text}<<< is False. See also the local file 'explanation.txt' in case the generated explanation does not fit the screen")
+            print(f"Above should have appeared an explanation of why >>>{axiom_text}<<< is False.") 
+            print(f"See also the local file 'explanation.txt' in case the generated explanation does not fit the screen.")
+            if "equivalence" in options or timeoutOccurred:
+                open("equivalence-classes.txt", "w").write(str((p9evaluator_equivalence if timeoutOccurred else p9evaluator).equivalences))
+                print(f"Also, since the equivalence strategy was employed, you should check the equivalence classes that were employed in the file equivalence-classes.txt")
             break #TODO
         elif evaluation == [True]:
             axioms_true += 1

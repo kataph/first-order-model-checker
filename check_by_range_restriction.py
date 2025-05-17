@@ -11,7 +11,8 @@ from model import prover9_parser
 from join_algorithms import Relation, hash_join, intersection_join
 
 
-from basic_formulas_manipulation import ToDisjunctiveNormalForm, ToMiniscopedDNF, ToMiniscopedNNF, ToMiniscopedPCNF, ToMiniscopedPDNF, ToMiniscopedPNNF, ToPrenex, ToPrenexDNF, ToPrenexNNF, ToReversePrenex, ToReversePrenexCNF, P9FreeVariablesExtractor, ToPrenexCNF, ToUniqueVariables, BINARY_OPS, dual_quantifier, dual_op, treeExplainer, treeExplainerRED, treeExplainerGREEN, treeExplainerYELLOW, treeExplainerReturning, my_logger, RemoveLines, ToString, get_existential_closure
+from basic_formulas_manipulation import BinaryOpSimplificator, ToDisjunctiveNormalForm, ToMiniscoped, ToMiniscopedDNF, ToMiniscopedNNF, ToMiniscopedPCNF, ToMiniscopedPDNF, ToMiniscopedPNNF, ToPrenex, ToPrenexDNF, ToPrenexNNF, ToReversePrenex, ToReversePrenexCNF, P9FreeVariablesExtractor, ToPrenexCNF, ToUniqueVariables, BINARY_OPS, dual_quantifier, dual_op, test_with_parsing, treeExplainer, treeExplainerRED, treeExplainerGREEN, treeExplainerYELLOW, treeExplainerReturning, my_logger, RemoveLines, ToString, get_existential_closure, print_tree
+
 
 
 
@@ -44,8 +45,11 @@ EXAMPLE_AXIOMS = [
     "(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T)).",
     "all P all Q all R all S  ((((continuantPartOf(P,Q,R)) & (temporalPartOf(S,R)))) -> (continuantPartOf(P,Q,S))) # label(\"continuant-part-of-dissective-on-third-argument-temporal\") .",
     "all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))) # label(\"fiat-line-occupies-1d-spatial-regions\") .",
-    "all A all B  ((((exists T  (((instanceOf(A,objectAggregate,T)) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) & (all T  ((continuantPartOf(A,B,T)) <-> (continuantPartOf(B,A,T)))))) -> ((A) = (B)))."
-    
+    "all A all B  ((((exists T  (((instanceOf(A,objectAggregate,T)) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) & (all T  ((continuantPartOf(A,B,T)) <-> (continuantPartOf(B,A,T)))))) -> ((A) = (B))).",
+    "all P all C1 all C2  ((((occursIn(P,C1)) & (all T  ((eXistsAt(P,T)) <-> (locatedIn(C1,C2,T)))))) -> (occursIn(P,C2))).",
+    "(exists X all Y ((A(X,Y) | B(X,Y)) & (C(X,Y) | D(Y)) & (E(Y) | F(Y)))).",
+    "(exists X all Y ((A(X,Y) | B(X,Y)) & (C(X,Y) | D(Y)))).",
+    "(exists X all Y (A(X,Y) & (C(X,Y) | D(Y)))).",
 ] 
 EXAMPLE_ASTS = [RemoveLines().transform(prover9_parser.parse(example_axiom)) for example_axiom in EXAMPLE_AXIOMS]
 
@@ -206,7 +210,7 @@ def delete_cond_from_disjunction(self, children, param = "disjunction") -> Tree:
         return left
     return Tree(param, children)
 def delete_cond_from_conjunction(self, children, param = "conjunction") -> Tree:
-    """'cond' or 'cond'  --> 'cond'"""
+    """'cond' and 'cond'  --> 'cond'"""
     left, right = children
     if left.data == right.data == "cond":
         return Tree('cond', [])
@@ -256,15 +260,20 @@ def rule_serialization(self, inputs, rules: list[callable], param) -> Tree:
 
 class ExistentialFormulaTransformer(Transformer):
     """Interpreter to manipulate an existential formula. If the formula is not in the shape (exists X phi) an error will be raised.
-        For example, (- A(x,y) and exists B(z)) -> error"""
+        For example, (- A(x,y) and exists B(z)) -> error
+        Note that giving a list of formulas will result in only the first formula being transformed"""
     def __init__(self, visit_tokens = True):
         super().__init__(visit_tokens)
         self.freeVars = P9FreeVariablesExtractor()
-        self.CNFminiscoper_simple = ToReversePrenexCNF()
+        #self.CNFminiscoper_simple = ToReversePrenexCNF() It now makes no sense to miniscope the formula, since the formula MUST start in PDNF
+        self.toPrenexDNF = ToPrenexDNF() # in order for the transformation system to work the formula MUST be in PDNF, it does not work if the formula is e.g. in PCNF, consider e.g. axists X all Y (axy | bxy) & (cxy | dy)
         self.toPrenex = ToPrenex()
         self.stringer = ToString()
         self.remover = RemoveLines()
+        self.simplificator = BinaryOpSimplificator()
 
+    def __call__(self, tree):
+        return self.adjust_transform_repeatedly(tree)
 
     def check_if_quantification_is_useless(self, ranged_variable, ranged_formula):
         free_variables_in_ranged_formula = self.freeVars.extract_free_variables_and_signature(ranged_formula)[0]
@@ -272,20 +281,29 @@ class ExistentialFormulaTransformer(Transformer):
             raise TypeError(f"Formula is in shape 'exists {self.ranged_variable} phi'! However, {ranged_variable} is not a free variable in phi! Free variables of phi are {free_variables_in_ranged_formula}")
     
     def adjust_transform_repeatedly(self, tree):
+        if tree.data == "start": # the formula starts with 'start'>'lines'>'line', then I just take the first formula
+            tree = self.remover(tree)
+        #     lines = tree.children[0]
+        #     return Tree("start", [Tree("lines", [Tree("line",[self.adjust_transform_one_axiom(line.children[0])]) for line in lines.children])])
+        # else:
+        #     return self.adjust_transform_one_axiom(tree)
+        return self.adjust_transform_one_axiom(tree)
+    def adjust_transform_one_axiom(self, tree):
         check_if_formula_is_existential(tree)
         ranged_variable, ranged_formula = tree.children
         self.ranged_variable = str(ranged_variable)
         
         self.check_if_quantification_is_useless(ranged_variable, ranged_formula)
         
-        CNFminiscoped_ranged_formula = self.CNFminiscoper_simple.adjust_transform_repeatedly(ranged_formula)
-        if CNFminiscoped_ranged_formula != ranged_formula:
-            my_logger.debug(f"As an input of ExistentialFormulaTransformer the fomula had shape 'exists x phi(x)'. Precisely phi = '{self.stringer.visit(ranged_formula)}'. However, in such a formula phi(x) is not CNFminiscoped. I have (simply-)CNFminiscoped it. Phi is now: {self.stringer.visit(CNFminiscoped_ranged_formula)}")
-        oldtree = CNFminiscoped_ranged_formula
-        newtree = self.transform(oldtree)
+        #CNFminiscoped_ranged_formula = self.CNFminiscoper_simple.adjust_transform_repeatedly(ranged_formula)
+        PDNFformula = self.simplificator(self.toPrenexDNF.transform_repeatedly(ranged_formula))
+        if PDNFformula != ranged_formula:
+            my_logger.debug(f"As an input of ExistentialFormulaTransformer the fomula had shape 'exists x phi(x)'. Precisely phi = '{self.stringer.visit(ranged_formula)}'. However, in such a formula phi(x) is not in PDNF. I have put it into such form. Phi is now: {self.stringer.visit(PDNFformula)}")
+        oldtree = PDNFformula
+        newtree = self.simplificator(self.transform(oldtree))
         while newtree != oldtree:
             oldtree = newtree
-            newtree = self.transform(oldtree)
+            newtree = self.simplificator(self.transform(oldtree))
         return newtree
     
 class GetRange(ExistentialFormulaTransformer):
@@ -296,7 +314,7 @@ class GetRange(ExistentialFormulaTransformer):
         super().__init__()
         self.static = static
         # self.toDNF = ToDisjunctiveNormalForm() 
-    
+
     def adjust_transform_repeatedly(self, tree):
         finalized_tree: Tree = super().adjust_transform_repeatedly(tree)
         # finalized_tree = self.toDNF.visit_repeatedly(finalized_tree) <- danger explosion!
@@ -311,7 +329,7 @@ class GetRange(ExistentialFormulaTransformer):
     existential_quantification_bounded = partialmethod(remove_useless_quantification, param = "existential_quantification_bounded")
     
     def disjunction(self, children):
-        """empty or Atom --> Atom; dom(X) or Phi --> dom(X)"""
+        """empty or phi --> phi; dom(X) or phi --> dom(X)"""
         return rule_serialization(self, inputs = children, rules = [simplify_binary, delete_empty_from_binary, dom_absorption], param = "disjunction")
     # It can also be done with one-liner: but the alternative is clearer
     # disjunction = partialmethod(rule_serialization, rules = [delete_empty_from_binary, dom_absorption], param = "disjunction")
@@ -328,7 +346,7 @@ class GetRange(ExistentialFormulaTransformer):
     conjunction_exc = conjunction
     
     def negation_exc(self, children):
-        """- - phi --> phi; - empty --> empty; - exists y G --> exists y - G (yes, it is right this way)"""
+        """- - phi --> phi; - empty --> empty; - exists y G --> exists y - G (yes, it is right this way); - atom --> dom"""
         return rule_serialization(self, inputs = children, rules = [double_negation_cancel, remove_negation_from_empty, commute_negation_with_existential, introduce_dom, dom_absorption], param = "negation")
     negation = negation_exc
 
@@ -355,7 +373,7 @@ class GetCoRange(ExistentialFormulaTransformer):
     
     existential_quantification = partialmethod(remove_useless_quantification, param = "existential_quantification")
     universal_quantification = partialmethod(remove_useless_quantification, param = "universal_quantification")
-    universal_quantification_bounded = partialmethod(reduce_to_existential_quantifier, param = "universal_quantification_bounded")
+    universal_quantification_bounded = partialmethod(remove_useless_quantification, param = "universal_quantification_bounded")
     existential_quantification_bounded = partialmethod(remove_useless_quantification, param = "existential_quantification_bounded")
     
     disjunction = partialmethod(delete_cond_from_disjunction, param = "disjunction")
@@ -383,7 +401,7 @@ def check_if_formula_is_quantification(tree: Tree, quantification_type: Literal[
 check_if_formula_is_existential = partial(check_if_formula_is_quantification, quantification_type = "existential")
 check_if_formula_is_universal = partial(check_if_formula_is_quantification, quantification_type = "universal")
 
-def get_range_corange(ast: Tree, quantification_type: Literal["existential", "universal"]) -> tuple[Tree, Tree]:
+def get_range_corange(ast: Tree, quantification_type: Literal["existential", "universal"], miniscoped: bool = True) -> tuple[Tree, Tree]:
     ast = RemoveLines().transform(ast)
     if quantification_type == "existential":
         range = GetRange().adjust_transform_repeatedly(ast)
@@ -396,12 +414,32 @@ def get_range_corange(ast: Tree, quantification_type: Literal["existential", "un
         existential_range = GetRange().adjust_transform_repeatedly(existential_ast)
         existential_corange = GetCoRange().adjust_transform_repeatedly(existential_ast)
         range = existential_range
-        corange = Tree("negation", [existential_corange])
-    # range = ToReversePrenex().adjust_transform_repeatedly(range)
-    # corange = ToReversePrenex().adjust_transform_repeatedly(corange)
-    range = ToMiniscopedPDNF().adjust_transform_repeatedly(range)
-    corange = ToMiniscopedPDNF().adjust_transform_repeatedly(corange)
+        if existential_corange == Tree("false",[]): #this case is at least always minified
+            corange = Tree("true",[])
+        else:
+            corange = Tree("negation", [existential_corange])
+    if miniscoped:
+        # range = ToReversePrenex().adjust_transform_repeatedly(range)
+        # corange = ToReversePrenex().adjust_transform_repeatedly(corange)
+        # range = ToMiniscopedPDNF().adjust_transform_repeatedly(range)
+        # corange = ToMiniscopedPDNF().adjust_transform_repeatedly(corange)
+        # The following two lines miniscope range and corange. This means that the joins will be easier, but also that the bound will be weaker. 
+        # Not doing this passage means that the bound maybe will be stronger, but the join calculation will be harder. 
+        range = ToMiniscoped().adjust_transform_repeatedly(range)
+        corange = ToMiniscoped().adjust_transform_repeatedly(corange)
+    
     return range, corange
+
+def get_range_corange_auto(ast: Tree, miniscoped: bool = True) -> tuple[Tree, Tree]:
+    ast = RemoveLines().transform(ast)
+    data: str = ast.data
+    if data.startswith("existential"):
+        quantification_type = "existential"
+    elif data.startswith("universal"):
+        quantification_type = "universal"
+    else:
+        raise TypeError(f"Formula {ast} is neither universal nor existential")
+    return get_range_corange(ast, quantification_type, miniscoped)
 
 
 def get_range_corange_form(ast: Tree) -> Tree:
@@ -457,7 +495,8 @@ class toBoundedPDNF(Interpreter):
     
     def adjust_transform_repeatedly(self, tree):
         oldtree = self.variablesAdjuster.adjust_variables(self.preliminary_transform(tree))
-        newtree = self.variablesAdjuster.adjust_variables(self.visit(oldtree))
+        X=self.visit(oldtree)
+        newtree = self.variablesAdjuster.adjust_variables(X) # TODO qui c'è errore
         
         while newtree != oldtree:
             oldtree = newtree
@@ -774,7 +813,7 @@ def test_bond_evaluation():
 # test_bond_evaluation()
 # exit()
 
-def test_range():
+def test_range_old():
     assert GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0]) == Tree("existential_quantification", [Token('VARIABLE', 'Y'), Tree("predicate", [Token("PREDICATE_SYMBOL","att"), Token("VARIABLE","X"), Token("VARIABLE","Y")])]), GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0])
     
     assert GetRange().adjust_transform_repeatedly(GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0])) == Tree("existential_quantification", [Token('VARIABLE', 'X'), Tree("predicate", [Token("PREDICATE_SYMBOL","att"), Token("VARIABLE","X"), Token("VARIABLE","Y")])]), GetRange().adjust_transform_repeatedly(EXAMPLE_ASTS[0])
@@ -850,28 +889,36 @@ def test_range():
 # exit()
 
 
-def test_range_corange_transform():
-    asts = [RemoveLines().transform(prover9_parser.parse(example_axiom)) for example_axiom in EXAMPLE_AXIOMS]
-    miniscopeAsts = [ToReversePrenexCNF().adjust_transform_repeatedly(ast) for ast in asts]
-    treeExplainer(asts[0])
-    # range0 = GetRange().adjust_transform_repeatedly(asts[0])
-    # corange0 = GetCoRange().adjust_transform_repeatedly(asts[0])
-    # treeExplainer(range0)
-    # treeExplainer(corange0)
-    # canonical = get_range_corange_form(asts[0])
-    # treeExplainer(canonical)
-    # treeExplainer(get_existential_bound_form(asts[0]))
-    treeExplainer(toBoundedMinifiedPCNF().adjust_transform_repeatedly(asts[0]))
-
-    treeExplainer(asts[1])
-    # range1 = GetRange().adjust_transform_repeatedly(asts[1])
-    # corange1 = GetCoRange().adjust_transform_repeatedly(asts[1])
-    # treeExplainer(range1)
-    # treeExplainer(corange1)
-    # canonical = get_range_corange_form(asts[1])
-    # treeExplainer(canonical)
-    # treeExplainer(get_existential_bound_form(asts[1]))
-    treeExplainer(toBoundedMinifiedPCNF().adjust_transform_repeatedly(asts[1]))
+def test_range_and_corange():
+    tests = [
+    ("(exists X all Y lec(Y) -> att(X,Y)).","exists Y att(X,Y).","all Y - lec(Y)."),
+    ("(exists X all Y ( - P(X,Y) | Q(X,Y))).","dom(X).","False."),
+    # ("(U(V) | (exists X all Y ( - P(X,Y) | Q(X,Y)))).",""),
+    ("(all X all Y lec(Y) -> att(X,Y)).","dom(X).","True."),
+    # ("(- exists X (B(X) & - - - - att(X,Y))).","",""),
+    # ("(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T)).",""),
+    # ("all P all Q all R all S  ((((continuantPartOf(P,Q,R)) & (temporalPartOf(S,R)))) -> (continuantPartOf(P,Q,S))) # label(\"continuant-part-of-dissective-on-third-argument-temporal\") .",""),
+    # ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))) # label(\"fiat-line-occupies-1d-spatial-regions\") .",""),
+    # ("all A all B  ((((exists T  (((instanceOf(A,objectAggregate,T)) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) & (all T  ((continuantPartOf(A,B,T)) <-> (continuantPartOf(B,A,T)))))) -> ((A) = (B))).",""),
+    # ("all P all C1 all C2  ((((occursIn(P,C1)) & (all T  ((eXistsAt(P,T)) <-> (locatedIn(C1,C2,T)))))) -> (occursIn(P,C2))).",""),
+    # ("(exists X all Y ((A(X,Y) | B(X,Y)) & (C(X,Y) | D(Y)) & (E(Y) | F(Y)))).",""),
+    # ("(exists X all Y ((A(X,Y) | B(X,Y)) & (C(X,Y) | D(Y)))).",""),
+    # ("(exists X all Y (A(X,Y) & (C(X,Y) | D(Y)))).",""),
+    ]
+    test_with_parsing(tests = [(x,y) for x,y,z in tests], func = lambda x: get_range_corange_auto(x,False)[0], name = "range", postprocess=RemoveLines())
+    test_with_parsing(tests = [(x,z) for x,y,z in tests], func = lambda x: get_range_corange_auto(x,False)[1], name = "corange", postprocess=RemoveLines())
     
+    try: 
+        GetRange()(prover9_parser.parse("(att(X,Y))."))
+    except TypeError:
+        print("Got TypeError when it should happen")
 
 
+    print("All good with range and corange!")
+    # idx = 0
+    # print_tree(asts[idx], "delete.txt")
+    # print_tree(ToPrenexDNF().transform_repeatedly(asts[idx]), "deletePDNF.txt")
+    # print_tree(GetRange().adjust_transform_repeatedly(asts[idx]), "delete2.txt")
+    # print_tree(GetCoRange().adjust_transform_repeatedly(asts[idx]), "delete3.txt")
+
+test_range_and_corange()

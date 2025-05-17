@@ -104,6 +104,8 @@ def intersects_equivalence_classes(equivalence_relations: list[list[set[Any]]], 
     # adds singletons
     for x in set(model.signature.constants).difference(set().union(*intersection_relation)):
         intersection_relation.append({x})
+    if set() in intersection_relation:
+        raise TypeError(f"empty set was found in intersection relation {intersection_relation} from inputs equivalence_relations = {equivalence_relations}. This should not happen!")
     return intersection_relation
     
 
