@@ -45,6 +45,7 @@ If a false axiom is met an explanation will be generated and saved to a file. Th
 If multiple false axioms are found, then an explanation for each one will be generated and saved to a different file, numbered with the line number of where the axiom is located in the axioms file. 
 
 ## TODOS
+- simplify use
 - Implement simplified treatment for defined predicates.
 - Implement functions.
 
