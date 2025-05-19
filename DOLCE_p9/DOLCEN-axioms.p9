@@ -252,13 +252,14 @@
 %(all X(pt(X) -> thing(X))) # label(owl). %The automatic translation from OWL to FOL that we used includes the owl:thing Class, not present in DOLCE. We add it.
 
 %Definitions of consantAtom (cat), constantAtomicPart (catp), consantPart(cp), constantProperPart(cpp), constantOverlap(cov)
+% FC: all commented because they do not appear in the model, same thing for the oncoming definitions. In any case recall that definitional extensions are equiconsistent with the base theory
 
-(all X (cat(X) <-> (ed(X) & (exists T1 (pre(X,T1))) & all T (pre(X,T) -> tat(X,T)))))  # label(constant_atom).
-(all X all Y (catp(X,Y) <-> (ed(X) & ed(Y) & (exists T1 (pre(X,T1))) & all T (pre(Y,T) -> tatp(X,Y,T)))))  # label(constant_atomic_part).
-(all X all Y (cp(X,Y) <-> (ed(X) & ed(Y) & (exists T1 (pre(Y,T1))) & all T (pre(Y,T) -> tp(X,Y,T))))) # label(constant_part_Dd25).
+%(all X (cat(X) <-> (ed(X) & (exists T1 (pre(X,T1))) & all T (pre(X,T) -> tat(X,T)))))  # label(constant_atom).
+%(all X all Y (catp(X,Y) <-> (ed(X) & ed(Y) & (exists T1 (pre(X,T1))) & all T (pre(Y,T) -> tatp(X,Y,T)))))  # label(constant_atomic_part).
+%(all X all Y (cp(X,Y) <-> (ed(X) & ed(Y) & (exists T1 (pre(Y,T1))) & all T (pre(Y,T) -> tp(X,Y,T))))) # label(constant_part_Dd25).
 %(all X all Y (cpp(X,Y) <-> (ed(X) & ed(Y) & (exists T1 (pre(Y,T1))) & all T (pre(Y,T) -> tpp(X,Y,T))))) # label(constant_proper_part_definition).
-(all X all Y (cpp(X,Y) <-> (ed(X) & ed(Y) & (exists T1 (pre(Y,T1))) & all T (pre(Y,T) -> (tp(X,Y,T) & -tp(Y,X,T)))))) # label(constant_proper_part_definition). %[Version to help proving the transitivity of cpp]
-(all X all Y (cov(X,Y) <-> (ed(X) & ed(Y) & (exists T1 (pre(X,T1) & pre(Y,T1))) & (exists Z (cp(Z,X) & cp(Z,Y))))))  # label(constant_overlap_definition).
+%(all X all Y (cpp(X,Y) <-> (ed(X) & ed(Y) & (exists T1 (pre(Y,T1))) & all T (pre(Y,T) -> (tp(X,Y,T) & -tp(Y,X,T)))))) # label(constant_proper_part_definition). %[Version to help proving the transitivity of cpp]
+%(all X all Y (cov(X,Y) <-> (ed(X) & ed(Y) & (exists T1 (pre(X,T1) & pre(Y,T1))) & (exists Z (cp(Z,X) & cp(Z,Y))))))  # label(constant_overlap_definition).
 
 
 (all X all Y all Z (tsum(Z,X,Y) <-> (((ped(Z) & ped(X) & ped(Y)) | (nped(Z) & nped(X) & nped(Y))) & (all W all T ((tov(W,Z,T) <-> (tov(W,X,T) | tov(W,Y,T)))))))) # label(temporary_sum_definition_from_Dd26).
@@ -268,17 +269,17 @@
 
 %Constant Participant of
 
-(all X all Y (constantParticipantOf(X,Y) <-> (ed(X) & pd(Y) & exists T (pre(Y,T)) & all T (pre(Y,T) -> pc(X,Y,T))))) # label(definition_constant_participant_of).
+%(all X all Y (constantParticipantOf(X,Y) <-> (ed(X) & pd(Y) & exists T (pre(Y,T)) & all T (pre(Y,T) -> pc(X,Y,T))))) # label(definition_constant_participant_of).
 
 
 %Constant Constituent Of
 
-(all X all Y (constantConstituentOf(X,Y) <-> (((ped(X) & ped(Y)) | (nped(X) & nped(Y)) | (pd(X) & pd(Y))) & exists T (pre(Y,T)) & all T (pre(Y,T) -> k(X,Y,T))))) # label(definition_constant_constituent_of).
+%(all X all Y (constantConstituentOf(X,Y) <-> (((ped(X) & ped(Y)) | (nped(X) & nped(Y)) | (pd(X) & pd(Y))) & exists T (pre(Y,T)) & all T (pre(Y,T) -> k(X,Y,T))))) # label(definition_constant_constituent_of).
 
 
 %Constant Quale Of
 
-(all X all Y (constantQualeOf(X,Y) <-> (((pr(X) & pq(Y)) | (tr(X) & tq(Y)) | (ar(X) & aq(Y))) & all T (pre(Y,T) -> tql(X,Y,T))))) # label(definition_constant_quale_of).
+%(all X all Y (constantQualeOf(X,Y) <-> (((pr(X) & pq(Y)) | (tr(X) & tq(Y)) | (ar(X) & aq(Y))) & all T (pre(Y,T) -> tql(X,Y,T))))) # label(definition_constant_quale_of).
 
 %Constantly Spatially Located At %not present in this version.
 
@@ -388,7 +389,7 @@
 
 (- (exists X (rRelTempConstitutionPED(X) & rRelTempConstitutionNPED(X)))).
 (- (exists X (rRelTempConstitutionPD(X) & rRelTempConstitutionNPED(X)))).
-(- (exists X (rrRelTempConstitutionPD(X) & rRelTempConstitutionPED(X)))).
+(- (exists X (rRelTempConstitutionPD(X) & rRelTempConstitutionPED(X)))).
 
 (all X ((rRelTempQualeARAQ(X) | rRelTempQualePRPQ(X)) <-> rRelTempQuale(X))).
 (- (exists X (rRelTempQualeARAQ(X) & rRelTempQualePRPQ(X)))).
