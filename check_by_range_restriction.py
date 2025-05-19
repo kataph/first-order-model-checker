@@ -921,4 +921,36 @@ def test_range_and_corange():
     # print_tree(GetRange().adjust_transform_repeatedly(asts[idx]), "delete2.txt")
     # print_tree(GetCoRange().adjust_transform_repeatedly(asts[idx]), "delete3.txt")
 
-test_range_and_corange()
+#test_range_and_corange()
+
+# ast = prover9_parser.parse("all I all START all END  ((((instanceOf(I,temporalInterval,I)) & (hasFirstInstant(I,START)) & (hasLastInstant(I,END)))) -> (all T1 all T2  ((((temporalPartOf(T1,I)) & (temporalPartOf(T2,I)) & (instanceOf(T1,temporalInstant,T1)) & (instanceOf(T2,temporalInstant,T2)) & (precedes(T1,T2)) & (-(exists T3  (((instanceOf(T3,temporalInstant,T3)) & (precedes(T1,T3)) & (precedes(T3,T2)))))))) -> (exists FILL  (((instanceOf(FILL,temporalInterval,FILL)) & (hasFirstInstant(FILL,T1)) & (hasLastInstant(FILL,T2)) & (temporalPartOf(FILL,I)))))))).")
+# treeExplainerYELLOW(ast)
+# PDNFast = ToPrenexDNF().transform_repeatedly(ast)
+# treeExplainerYELLOW(PDNFast)
+# print(len(ast.pretty())) #3225
+# print(len(PDNFast.pretty())) #3824
+
+# from basic_formulas_manipulation import AssociativeFlattener
+# ast = prover9_parser.parse("all I all START all END  ((((instanceOf(I,temporalInterval,I)) & (hasFirstInstant(I,START)) & (hasLastInstant(I,END)))) -> (-(exists GAP exists GAPSTART exists GAPEND  (((-(instanceOf(GAP,temporalInstant,GAP))) & (hasFirstInstant(GAP,GAPSTART)) & (hasLastInstant(GAP,GAPEND)) & (((precedes(GAPEND,END)) | (((temporalPartOf(END,I)) & ((GAPEND) = (END)))))) & (((precedes(START,GAPSTART)) | (((temporalPartOf(START,I)) & ((GAPSTART) = (START)))))) & (-(temporalPartOf(GAP,I)))))))).")
+# print_tree(ast, "delete.txt")
+# # print_tree(ast, "delete.txt")
+# # treeExplainerYELLOW(ast)
+# PDNFast = ToPrenexDNF()(ToPrenexNNF()(ast))
+# PDNFast2 = ToPrenexDNF()(ast)
+# assert PDNFast == PDNFast2
+
+# # treeExplainerYELLOW(PDNFast)
+# # print(len(ast.pretty())) #2835
+# # print(len(PDNFast.pretty())) #1639553
+# # print_tree(ToPrenexNNF().transform_repeatedly(ast), "delete.txt")
+
+# print_tree(ast, "delete.txt")
+# print_tree(ToPrenexNNF()(ast), "delete2.txt")
+# print_tree(PDNFast, "delete3.txt")
+# print_tree(AssociativeFlattener().transform_repeatedly(PDNFast), "delete2.txt")
+
+# print_tree(AssociativeFlattener()(ast), "delete2.txt")
+# print_tree((x:=AssociativeFlattener().transform_repeatedly(ToPrenexNNF().transform_repeatedly(ast))), "delete3.txt")
+# y=ToDisjunctiveNormalForm()(x)
+# print_tree(y, "delete2.txt")
+

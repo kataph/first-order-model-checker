@@ -368,21 +368,21 @@ def read_model_file(model_file: str) -> Model:
 
 # model = read_model_file("model.p9")
 
-def check_axioms_file(axioms_file: str, model: Model, options: list[str], timeout: int, timeout_aux: int, no_timeout: bool, multiprocessing_required = False, processes_number = 4):
+def check_axioms_file(axioms_file: str, model: Model, options: list[str], timeout: int, timeout_aux: int, no_timeout: bool, breakOnFalse: bool, multiprocessing_required = False, processes_number = 4):
     """Read file line by line as a whole and checks axioms one-by-one against given model"""
     
     lines = open(axioms_file, "rt").readlines()
     
     if not multiprocessing_required:
-        check_lines(lines, model, options, timeout, timeout_aux, no_timeout)
+        check_lines(lines, model, options, timeout, timeout_aux, no_timeout, breakOnFalse)
     else: 
         if processes_number < 1: raise TypeError(f"Asked for multiprocessing with non-positive process number")
         subliness = [lines[i::processes_number] for i in range(processes_number)]
         for sublines in subliness:
             process = ...
-            process.execute(check_lines, sublines, model, options)
+            process.execute(check_lines, sublines, model, options, ...)
 
-def check_lines(lines: list[str], model: Model, options: list[str], timeout: int, timeout_aux: int, no_timeout: bool):    
+def check_lines(lines: list[str], model: Model, options: list[str], timeout: int, timeout_aux: int, no_timeout: bool, breakOnFalse: bool):    
     p9variables = P9FreeVariablesExtractor()
     p9evaluator = P9Evaluator(model, options)
     p9evaluator_equivalence = P9Evaluator(model, ["equivalence"])
@@ -394,7 +394,7 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
     axioms_unexpected = 0
     
     # for line in tqdm(lines):
-    for line in lines:
+    for i,line in enumerate(lines):
         no_comment_line = re.sub("%.*", "", line) # the regex "%.*\n" is wrong because it will not match the last line of a file
         no_comment_line = no_comment_line.replace("\n","")
         if no_comment_line in ["", "\n"] :
@@ -417,7 +417,7 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
                 raise TypeError(f"An axiom was found with the predicate {predicate} of arity {arity}, but in the model the same predicate has arity {model.signature.predicates[predicate]}!")
 
 
-        print(f"\nevaluating >>>{axiom_text}<<< against given model...")
+        print(f"\n evaluating line {i} of {len(lines)} lines: Axiom is  >>>{axiom_text}<<< against given model...")
         
         
         # if "range" in options:
@@ -502,14 +502,16 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
             print(f"Evaluation of axiom >>>{axiom_text}<<< is False! Generating explanation...")
             #p9explainer.explain(axiomsAST)
             #treeExplainerRED(axiomsAST) <-- too big
-            with open("explanation.txt", "w", encoding="utf-8") as fo:
+            explanation_label = i
+            with open(f"explanation_{explanation_label}.txt", "w", encoding="utf-8") as fo:
                 fo.write(treeExplainerReturning(axiomsAST))
-            print(f"Above should have appeared an explanation of why >>>{axiom_text}<<< is False.") 
-            print(f"See also the local file 'explanation.txt' in case the generated explanation does not fit the screen.")
+            # print(f"Above should have appeared an explanation of why >>>{axiom_text}<<< is False.") 
+            print(f"...See the local file 'explanation_{explanation_label}.txt' for the explanation.")# in case the generated explanation does not fit the screen.")
             if "equivalence" in options or timeoutOccurred:
-                open("equivalence-classes.txt", "w").write(str((p9evaluator_equivalence if timeoutOccurred else p9evaluator).equivalences))
-                print(f"Also, since the equivalence strategy was employed, you should check the equivalence classes that were employed in the file equivalence-classes.txt")
-            break #TODO
+                open(f"equivalence-classes_{explanation_label}.txt", "w").write(str((p9evaluator_equivalence if timeoutOccurred else p9evaluator).equivalences))
+                print(f"Also, since the equivalence strategy was employed, you should check the equivalence classes that were employed in the file equivalence-classes_{explanation_label}.txt")
+            if breakOnFalse:
+                break #TODO
         elif evaluation == [True]:
             axioms_true += 1
         else:
@@ -517,17 +519,17 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
             axioms_unexpected += 1
     print(f"Axioms analysis ended. Found {axioms_true}/{axioms_true+axioms_false+axioms_unexpected} true axioms and {axioms_false}/{axioms_true+axioms_false+axioms_unexpected} false axioms.")
     if axioms_false > 0:
-        print(f"Some axioms ({axioms_false}) were evaluated as false. Check printed output for information on which they were and why they were evaluated as false. See also the local file 'explanation.txt' in case the generated explanation does not fit the screen.")
+        print(f"Some axioms ({axioms_false}) were evaluated as false. Check printed output for information on which they were and why they were evaluated as false. See also the local file(s) 'explanation_[...].txt'")# in case the generated explanation does not fit the screen.")
     if axioms_unexpected > 0:
-        print(f"Some axioms ({axioms_unexpected}) were evaluated to an unexpected value. Check printed output for information on which they were and what they were evaluated to.")
+        print(f"Some axioms ({axioms_unexpected}) were evaluated to an unexpected value or run out of time. Check printed output for information on which they were and what they were evaluated to.")
 
-def check_model_against_axioms(model_file: str, axioms_file: str, options: list[str], timeout: int, timeout_aux: int, no_timeout: bool)->None:
+def check_model_against_axioms(model_file: str, axioms_file: str, options: list[str], timeout: int = 10, timeout_aux: int = 200, no_timeout: bool = False, breakOnFalse: bool = False)->None:
     start1 = time.time()
     model = read_model_file(model_file)
     stop1 = time.time()
     
     start2 = time.time()
-    check_axioms_file(axioms_file, model, options, timeout, timeout_aux, no_timeout)
+    check_axioms_file(axioms_file, model, options, timeout, timeout_aux, no_timeout, breakOnFalse)
     stop2 = time.time()
     print(f"To read model {stop1-start1} seconds were required")
     print(f"To check axioms {stop2-start2} seconds were required")
@@ -637,6 +639,25 @@ if __name__ == "__main__":
     parser.add_argument('-t', '--timeout', type = int, default = 10, help="Timeout of the chosen strategy, in seconds. After the timeout the auxillary strategy will be called")
     parser.add_argument('-taux', '--timeout_aux', type = int, default = 120, help="Timeout of the auxillary strategy, in seconds.")
     parser.add_argument('-nout', '--no_timeout', type = bool, default = False, help="Deactivates the timeout system.")
+    parser.add_argument('-bof', '--break_on_false', type = bool, default = True, help="If true, which is the default value, the program will stop at the first axiom evaluated as False.")
     args = parser.parse_args()
-    check_model_against_axioms(args.model_file, args.axioms_file, args.options, args.timeout, args.timeout_aux, args.no_timeout)
-    #check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9\continuant-mereology_toUP.p9", ["range"])
+    check_model_against_axioms(args.model_file, args.axioms_file, args.options, args.timeout, args.timeout_aux, args.no_timeout, args.break_on_false)
+    
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/continuant-mereology_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/existence-instantiation_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/generic-dependence_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/history_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/material-entity_toUP.p9", ["range"], breakOnFalse = True)
+    
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/occurrent-mereology_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/order_toUP.p9", ["range"], breakOnFalse = True, timeout=60)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/participation_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/spatial_toUP.p9", ["range"], breakOnFalse = True, timeout=60)
+    
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/spatiotemporal_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/specific-dependency_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/temporal-region_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/universal-declaration_toUP.p9", ["range"], breakOnFalse = True)
+    
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO-test-axioms.p9", ["equivalence"], breakOnFalse = True)
+    

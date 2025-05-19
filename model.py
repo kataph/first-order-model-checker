@@ -10,7 +10,7 @@ lines: line+
 line: (sentence | atomicsentence) label? "."
 
 label: "#" "label(" LABEL_TEXT ")"
-                      
+
 ?sentence: "exists" VARIABLE entailterm -> existential_quantification
           | "all" VARIABLE entailterm -> universal_quantification
           | "exists" VARIABLE sentence -> existential_quantification
@@ -36,11 +36,12 @@ label: "#" "label(" LABEL_TEXT ")"
             | "-" literalatom -> negation
             | "-" sentence -> negation_exc
 
-?atomicsentence: predicate
+?atomicsentence: dom
                 | equality_atom
                 | predicate0
                 | "(" sentence ")"
                 | "(" entailterm ")"
+                | predicate
 
 ?equality_atom: term "=" term
                 | term "=" "(" term ")" // there is this horrendous possibility also
@@ -51,7 +52,8 @@ label: "#" "label(" LABEL_TEXT ")"
 ?term: CONSTANT // there are no functions
     | VARIABLE
 
-atomicstatement: PREDICATE_SYMBOL "(" _constant_list ")"
+atomicstatement: PREDICATE_SYMBOL "(" _constant_list ")" // TODO: remove?
+dom: "dom" "(" VARIABLE ")"
 
 predicate0 : "True" -> true
            | "False" -> false
@@ -61,7 +63,7 @@ _term_list: (term ",")* term
 _constant_list: (CONSTANT ",")* CONSTANT
 CONSTANT: /[a-z0-9]+_?[0-9a-zA-Z]*/ 
 VARIABLE: /[A-Z]+_?\d*/  // uppercase style
-LABEL_TEXT: /"?[a-zA-Z0-9_\-\>\<\\.]+"?/ 
+LABEL_TEXT: /"?[a-zA-Z0-9_\-\>\<\\.\+]+"?/ 
 
 %import common.ESCAPED_STRING
 %import common.SIGNED_NUMBER

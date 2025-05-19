@@ -19,10 +19,10 @@ logging.basicConfig(level=logging.INFO)
 def print_tree(tree: Tree, filename: str):
     open(filename, "w", encoding = "utf-8").write(treeExplainerReturning(tree))
 
-def base_test(tests:list[tuple[str,str]], func:Callable[[str], Tree], name:str):
+def base_test(tests:list[tuple[str,str]], func:Callable[[str], str], name:str):
     for i, (inp, out) in enumerate(tests):
         calc = func(inp)
-        assert calc == out, f"error at test {i}: from {inp} expected {out} got {ToString().visit(calc)}"
+        assert calc == out, f"error at test {i}: from {inp} expected {out} got {calc}"
         print(f"Test {i} is good!")
     print(f"All good for {name}")
 def test_with_parsing(tests:list[tuple[str,str]], func:Callable[[Tree], Tree], name:str, postprocess: Callable[[Tree], Tree] = lambda x:x):
@@ -134,6 +134,9 @@ text3 = "all X all Y X = Y."
 
 class ToString(Interpreter):
     """Transform a tree into a formatted string"""
+
+    def __call__(self, tree):
+        return self.visit(tree)
 
     def print_binary_op(self, tree, op: str):
         left, right = tree.children
@@ -346,6 +349,9 @@ class AssociativeFlattener(Transformer):
 
     def __init__(self, visit_tokens=False):
         super().__init__(visit_tokens)
+
+    def __call__(self,tree):
+        return self.transform_repeatedly(tree)
 
     def transform_repeatedly(self, tree):
         oldtree = tree
@@ -1294,27 +1300,38 @@ def pushdown_binary_op(self, tree, param: Literal["conjunction", "disjunction"])
         return self.visit(tree.children[0])
 
     # This works for ennary operations
-    if any(child.data == dual_op(param) for child in tree.children):
-        op_child = next(child for child in tree.children if child.data == dual_op(param))
-        return Tree(
-                dual_op(param),
-                [
+    if any(child.data == dual_op(param) for child in tree.children): # if any child is of the dual type
+        op_child = next(child for child in tree.children if child.data == dual_op(param)) # take the first child (=: op_child) of that type
+        return Tree( # and commute the two binary operations
+                dual_op(param), # in such a way that now the top operation is the one that was a child
+                [ # and it has as children only the old top operation, repeated as many times as there are subchildren in op_child, 
+                  # the subchildrend of such old top operations are the local subchild of the op_child and for the rest the other children of the old top operation
                     Tree(param, [self.visit(child) if child != op_child else self.visit(sub_child) for child in tree.children]) for sub_child in op_child.children
                 ]
         )
     return Tree(param, self.visit_children(tree))
 
-class ToDisjunctiveNormalForm(ReduceLogicalSignature):
-    """Transform a propositional formula in disjunctive normal form. Non propositional operators are ignored"""
+
+
+class ToNegativeNormalForm(ReduceLogicalSignature):
+    """Transform a propositional formula in negative normal form. (Non propositional operators are included)"""
+    negation = negation_exc = pushdown_negation_interpreter_general
+
+class ToDisjunctiveNormalForm(ToNegativeNormalForm):
+    """Transform a propositional formula in disjunctive normal form. A pretrasformation to NNF is forced at the start, this prevents some issues with size explosion. (Non propositional operators are included but only for negation pushdown)"""
+    def __init__(self):
+        self.toNNF = ToNegativeNormalForm()
+        super().__init__(pretransform_function=self.toNNF)
+
     conjunction_exc = conjunction = partialmethod(pushdown_binary_op, param = "conjunction")
 
-    negation = negation_exc = pushdown_negation_interpreter_general
-
-class ToConjunctiveNormalForm(ReduceLogicalSignature):
-    """Transform a propositional formula in conjunctive normal form. Non propositional operators are ignored"""
+class ToConjunctiveNormalForm(ToNegativeNormalForm):
+    """Transform a propositional formula in conjunctive normal form. A pretrasformation to NNF is forced at the start, this prevents some issues with size explosion.. (Non propositional operators are included but only for negation pushdown)"""
+    def __init__(self):
+        self.toNNF = ToNegativeNormalForm()
+        super().__init__(pretransform_function=self.toNNF)
+    
     disjunction_exc = disjunction = partialmethod(pushdown_binary_op, param = "disjunction")
-
-    negation = negation_exc = pushdown_negation_interpreter_general
 
 
 def test_reduce_logical_signature():
@@ -1324,7 +1341,18 @@ def test_reduce_logical_signature():
         ("(A(X) & A(X)).", "(A(X))."),
         ("(A(X) & A(X) & A(X)).", "(A(X))."),
     ]
-    base_test(tests, lambda inp: ToString().visit(ReduceLogicalSignature().visit_repeatedly(prover9_parser.parse(inp))), "reduce logical signature")
+    base_test(tests, lambda inp: ToString()(ReduceLogicalSignature()(prover9_parser.parse(inp))), "reduce logical signature")
+
+def test_toNNF():
+    tests = [
+        ("((A(X) & A(X)) | C(X)).", "(A(X) | C(X))."),
+        ("((A(X) & B(X)) | C(X)).", "((A(X) & B(X)) | C(X))."),
+        ("(-((A(X) & B(X)) | exists X C(X))).", "((-A(X) | -B(X)) & (all X (-C(X))))."),
+        ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).", "(all X (all T (-instanceOf(X,fiatLine,T) | (exists S (exists TP ((temporalPartOf(TP,T) & occupiesSpatialRegion(X,S,TP)) & instanceOf(S,oneDimensionalSpatialRegion,TP)))))))."),
+    ]
+    func = lambda inp: ToString()(ToNegativeNormalForm()(prover9_parser.parse(inp)))
+    name = "toCNF"
+    base_test(tests, func, name)
 
 def test_toCNF():
     tests = [
@@ -1333,7 +1361,7 @@ def test_toCNF():
         ("((A(X) & B(X)) | exists X C(X)).", "((A(X) | (exists X (C(X)))) & (B(X) | (exists X (C(X)))))."),
         ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).", "(all X (all T (-instanceOf(X,fiatLine,T) | (exists S (exists TP ((temporalPartOf(TP,T) & occupiesSpatialRegion(X,S,TP)) & instanceOf(S,oneDimensionalSpatialRegion,TP)))))))."),
     ]
-    func = lambda inp: ToString().visit(ToConjunctiveNormalForm().visit_repeatedly(prover9_parser.parse(inp)))
+    func = lambda inp: ToString()(ToConjunctiveNormalForm()(prover9_parser.parse(inp)))
     name = "toCNF"
     base_test(tests, func, name)
 
@@ -1344,11 +1372,12 @@ def test_toDNF():
         ("((A(X) | B(X)) & (C(X) | True)).", "(A(X) | B(X))."),
         ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).", "(all X (all T (-instanceOf(X,fiatLine,T) | (exists S (exists TP ((temporalPartOf(TP,T) & occupiesSpatialRegion(X,S,TP)) & instanceOf(S,oneDimensionalSpatialRegion,TP)))))))."),
     ]
-    func = lambda inp: ToString().visit(ToDisjunctiveNormalForm().visit_repeatedly(prover9_parser.parse(inp)))
+    func = lambda inp: ToString()(ToDisjunctiveNormalForm()(prover9_parser.parse(inp)))
     name = "toDNF"
     base_test(tests, func, name)
      
 # test_reduce_logical_signature()
+# test_toNNF()
 # test_toCNF()
 # test_toDNF()
 # exit()
@@ -1359,6 +1388,9 @@ class ToPrenexCNF:
     def __init__(self):
         self.toPrenex = ToPrenex()
         self.toCNF = ToConjunctiveNormalForm()
+
+    def __call__(self, tree):
+        return self.transform_repeatedly(tree)
 
     def transform_repeatedly(self, tree):
         oldtree = tree
@@ -1377,6 +1409,9 @@ class ToPrenexDNF:
         self.toPrenex = ToPrenex()
         self.toDNF = ToDisjunctiveNormalForm()
 
+    def __call__(self, tree):
+        return self.transform_repeatedly(tree)
+
     def transform_repeatedly(self, tree):
         oldtree = tree
         newtree_pre = self.toPrenex.adjust_transform_repeatedly(oldtree)
@@ -1394,6 +1429,9 @@ class ToPrenexNNF:
         self.toPrenex = ToPrenex()
         self.toNNF = ToNNF()
 
+    def __call__(self, tree):
+        return self.transform_repeatedly(tree)
+
     def transform_repeatedly(self, tree):
         oldtree = tree
         newtree_pre = self.toPrenex.adjust_transform_repeatedly(oldtree)
@@ -1405,6 +1443,20 @@ class ToPrenexNNF:
         return newtree
 
 
+def test_toPDNF():
+    tests = [
+        ("((A(X) | B(X)) & C(X)).", "((A(X) & C(X)) | (B(X) & C(X)))."),
+        ("((A(X) | B(X)) & (C(X) | D(X))).", "(((A(X) & C(X)) | (A(X) & D(X))) | ((B(X) & C(X)) | (B(X) & D(X))))."),
+        ("((A(X) | B(X)) & (C(X) | True)).", "(A(X) | B(X))."),
+        ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).", "(all X (all T (exists S (exists TP (-instanceOf(X,fiatLine,T) | ((temporalPartOf(TP,T) & occupiesSpatialRegion(X,S,TP)) & instanceOf(S,oneDimensionalSpatialRegion,TP)))))))."),
+        ("all I all START all END  ((((instanceOf(I,temporalInterval,I)) & (hasFirstInstant(I,START)) & (hasLastInstant(I,END)))) -> (-(exists GAP exists GAPSTART exists GAPEND  (((-(instanceOf(GAP,temporalInstant,GAP))) & (hasFirstInstant(GAP,GAPSTART)) & (hasLastInstant(GAP,GAPEND)) & (((precedes(GAPEND,END)) | (((temporalPartOf(END,I)) & ((GAPEND) = (END)))))) & (((precedes(START,GAPSTART)) | (((temporalPartOf(START,I)) & ((GAPSTART) = (START)))))) & (-(temporalPartOf(GAP,I)))))))).","(all I (all START (all END (all GAP (all GAPSTART (all GAPEND (((-instanceOf(I,temporalInterval,I) | -hasFirstInstant(I,START)) | -hasLastInstant(I,END)) | (((((instanceOf(GAP,temporalInstant,GAP) | -hasFirstInstant(GAP,GAPSTART)) | -hasLastInstant(GAP,GAPEND)) | ((-precedes(GAPEND,END) & -temporalPartOf(END,I)) | (-precedes(GAPEND,END) & -GAPEND = END))) | ((-precedes(START,GAPSTART) & -temporalPartOf(START,I)) | (-precedes(START,GAPSTART) & -GAPSTART = START))) | temporalPartOf(GAP,I)))))))))."),
+    ]
+    func = lambda inp: ToString()(ToPrenexDNF()(prover9_parser.parse(inp)))
+    name = "toPDNF"
+    base_test(tests, func, name)
+
+# test_toPDNF()
+# exit()
 # toCNF = ToConjunctiveNormalForm()
 # toPCNF = ToPrenexCNF()
 # text = "(P(x,y) & Q(a,b) & C(z) -> R(a))."
