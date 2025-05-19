@@ -22,7 +22,9 @@ The equivalence strategy reduces this to `O(c'^a)` where `c'` is the number of e
 The range-constraining strategy further reduces the number `c'`, to a quantity that must be evaluated depending on the underlying quantifier in the axiom, and is difficult describe a-priori. Again, in the worst case there is no increase in performance, however, in the typical case, the increment is huge. The range-bounds are relatively simple formulas: at most union of existential conjunctive formulas, that is, they are union of conjunctive queries and the underlying conjunctive queries are evaluated against the model using hash-joins with no non-trivial optimizations. 
 
 ## How to install
-For now clone the repo and execute the python file `check.py`. 
+For now clone or download the repo and execute the python file `check.py`. 
+To clone the repo: execute the following line in a terminal `git clone https://github.com/kataph/fol_model_checker.git`.
+Then execute the python file `check.py` and supply the correct arguments as explained in the next section. 
 Before that, if so needed, install the requirements with e.g. `pip3 install -r requirements.txt` or `pip install -r requirements.txt`. 
 
 ## How to use
