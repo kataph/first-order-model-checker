@@ -11,7 +11,7 @@ As of now three evaluation strategies have been implemented:
 - an equivalence-based strategy, that reduces the size of the quantification domain for each quantifier: given the signature of the quantified formula, all the constants that cannot be distinguished by the symbols in the signature are collapsed together. 
 - a further reduction of the quantification domains based on the a-priori determination of simple range expressions that the quantified variables must satisfy. Derived on some old works about first-order queries on databases of the 80s-90s (Mainly [this one](https://link.springer.com/chapter/10.1007/3-540-51251-9_8) of François Bry). 
 
-Simply run check.py supplying the path to a file containing a model and the path to a file containing a theory (e.g. `>python check.py -m DOLCE_p9/DOLCE-clay-statue-model.p9 -a DOLCE_p9/DOLCE-clay-statue-axioms.p9`). 
+Simply run check.py supplying the path to a file containing a model and the path to a file containing a theory (e.g. `python3 check.py -m DOLCE_p9/DOLCE-clay-statue-model.p9 -a DOLCE_p9/DOLCE-clay-statue-axioms.p9` or `python check.py [...]`). 
 Default evaluation strategy is brute force. Supply a value to `--options` (can only be `equivalence` or `range`) to change the evauation strategy. 
 
 Some tests are present in `tests.py`. They can be run by executing that file. 
@@ -20,6 +20,10 @@ Further examples are present in the `DOLCE_p9` and `BFO_p9` folders. For instanc
 Note that the complexity of the brute-force algorithm is `O(c^a)` where `c` is the number of constants in the model, and `a` is the maximum nesting-depth of quantifiers. 
 The equivalence strategy reduces this to `O(c'^a)` where `c'` is the number of equivalence classes of constants that can be distinguished by a property formulated with the signature of the underlying axiom (`c'` is typically smaller than `c`, however they are the same in the worst case). It is most impactful if the signature of the axiom is small w.r.to the signature of the whole theory, however, if the signature of the axiom contains equality, the complexity goes back to the brute-force case. 
 The range-constraining strategy further reduces the number `c'`, to a quantity that must be evaluated depending on the underlying quantifier in the axiom, and is difficult describe a-priori. Again, in the worst case there is no increase in performance, however, in the typical case, the increment is huge. The range-bounds are relatively simple formulas: at most union of existential conjunctive formulas, that is, they are union of conjunctive queries and the underlying conjunctive queries are evaluated against the model using hash-joins with no non-trivial optimizations. 
+
+## How to install
+For now clone the repo and execute the python file `check.py`. 
+Before that, if so needed, install the requirements with e.g. `pip3 install -r requirements.txt` or `pip install -r requirements.txt`. 
 
 ## How to use
 The input arguments are:
