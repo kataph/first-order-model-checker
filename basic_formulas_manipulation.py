@@ -1,5 +1,9 @@
-from functools import partialmethod
+import logging
+my_logger = logging.getLogger("my_logger")
+logging.basicConfig(level=logging.INFO)
 import re
+
+from functools import partialmethod
 from typing import Literal, Callable
 
 from lark import Tree, Token, Transformer
@@ -10,11 +14,6 @@ from model import prover9_parser, Signature, Model, P9ModelReader
 from PrettyPrint import PrettyPrintTree
 from PrettyPrint.Utils.Orientation import Orientation
 
-import ansi2html
-
-import logging
-my_logger = logging.getLogger("my_logger")
-logging.basicConfig(level=logging.INFO)
 
 def print_tree(tree: Tree, filename: str):
     open(filename, "w", encoding = "utf-8").write(treeExplainerReturning(tree))
@@ -90,8 +89,6 @@ treeExplainerReturningRED = PrettyPrintTree(
 treeExplainerReturningGREEN = PrettyPrintTree(
     getChildren, getExplanation, return_instead_of_print=True, color=Back.GREEN
 )
-
-ansi2htmlConverter = ansi2html.Ansi2HTMLConverter()
 
 text0 = (
     "(all X (cat(X) <-> (ed(X) & (exists T pre(X,T)) & all T (pre(X,T) -> tat(X,T)))))."

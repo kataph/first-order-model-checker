@@ -1,0 +1,22 @@
+% commented hasHistory
+
+set(prolog_style_variables)
+
+%all A all B  ((historyOf(A,B)) <-> (hasHistory(B,A))) # label("history-of-inverse-of-has-history") .
+
+all P all Q all R  ((((historyOf(P,Q)) & (historyOf(P,R)))) -> ((Q) = (R))) # label("history-of-functional-on-second-argument") .
+
+all P all Q all R  ((((historyOf(P,Q)) & (historyOf(R,Q)))) -> ((P) = (R))) # label("history-of-functional-on-first-argument") .
+
+all H  ((exists T  (instanceOf(H,history,T))) -> (exists M  (historyOf(H,M)))) # label("history-is-of-material-entity") .
+
+all M  ((exists T  (instanceOf(M,materialEntity,T))) -> (exists H  (historyOf(H,M)))) # label("history-of-material-entity-exists") .
+
+all H all M  ((historyOf(H,M)) -> (all T  ((eXistsAt(M,T)) -> (participatesIn(M,H,T))))) # label("history-of-participates-in-history") .
+
+all M all H  ((historyOf(H,M)) -> (all T  ((instanceOf(M,materialEntity,T)) <-> (instanceOf(H,history,T))))) # label("history-contemporaneous-with-material-entity") .
+
+all A all B  ((historyOf(A,B)) -> (((exists T  (instanceOf(A,history,T))) & (exists T  (instanceOf(B,materialEntity,T)))))) # label("history-of-domain-range") .
+
+
+

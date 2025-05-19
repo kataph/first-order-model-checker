@@ -1,0 +1,20 @@
+%hasParticipant commented
+
+set(prolog_style_variables)
+
+%all T all A all B  ((participatesIn(A,B,T)) <-> (hasParticipant(B,A,T))) # label("participates-in-inverse-of-has-participant") .
+
+all P all T  ((instanceOf(P,process,T)) -> (exists C  (participatesIn(C,P,T)))) # label("process-always-has-participant") .
+
+all P all Q all R all S  ((((participatesIn(P,Q,R)) & (temporalPartOf(S,R)))) -> (participatesIn(P,Q,S))) # label("participates-in-dissective-on-third-argument-temporal") .
+
+all C all P all R all T  ((((occupiesTemporalRegion(P,R)) & (participatesIn(C,P,T)))) -> (temporalPartOf(T,R))) # label("all-participation-at-process-occupied-temporal-region") .
+
+all A all B all T  ((participatesIn(A,B,T)) -> (((((((instanceOf(A,independentContinuant,T)) & (-(instanceOf(A,spatialRegion,T))))) | (instanceOf(A,specificallyDependentContinuant,T)) | (instanceOf(A,genericallyDependentContinuant,T)))) & (instanceOf(B,process,T)) & (instanceOf(T,temporalRegion,T))))) # label("participates-in-domain-range") .
+
+all SDC all P all T  ((((instanceOf(SDC,specificallyDependentContinuant,T)) & (participatesIn(SDC,P,T)))) -> (exists TP exists IC  (((instanceOf(TP,temporalRegion,TP)) & (temporalPartOf(TP,T)) & (instanceOf(IC,independentContinuant,TP)) & (-(instanceOf(IC,spatialRegion,TP))) & (specificallyDependsOn(SDC,IC)) & (participatesIn(IC,P,TP)))))) # label("participation-of-specific-dependent-continuant") .
+
+all GDC all P all T  ((((instanceOf(GDC,genericallyDependentContinuant,T)) & (participatesIn(GDC,P,T)))) -> (exists TP exists B  (((temporalPartOf(TP,T)) & (concretizes(B,GDC,TP)) & (((((instanceOf(B,specificallyDependentContinuant,TP)) & (exists IC  (((specificallyDependsOn(B,IC)) & (participatesIn(IC,P,TP))))))) | (((occurrentPartOf(B,P)) & (eXistsAt(B,TP)))))))))) # label("participation-of-generically-dependent-continuant") .
+
+
+

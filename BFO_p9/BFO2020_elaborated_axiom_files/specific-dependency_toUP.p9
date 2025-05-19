@@ -1,0 +1,44 @@
+%bearerOf, hasRealization, materialBasisOf, specificallyDependedOnBy
+
+set(prolog_style_variables)
+
+%all A all B  ((inheresIn(A,B)) <-> (bearerOf(B,A))) # label("inheres-in-inverse-of-bearer-of") .
+
+%all A all B  ((realizes(A,B)) <-> (hasRealization(B,A))) # label("realizes-inverse-of-has-realization") .
+
+%all T all A all B  ((hasMaterialBasis(A,B,T)) <-> (materialBasisOf(B,A,T))) # label("has-material-basis-inverse-of-material-basis-of") .
+
+%all A all B  ((specificallyDependsOn(A,B)) <-> (specificallyDependedOnBy(B,A))) # label("specifically-depends-on-inverse-of-specifically-depended-on-by") .
+
+all R all P all B  ((((realizes(P,R)) & (inheresIn(R,B)))) -> (exists T  (participatesIn(B,P,T)))) # label("realizable-bearer-participates-in-realization") .
+
+all P all Q all R all S  ((((hasMaterialBasis(P,Q,R)) & (temporalPartOf(S,R)))) -> (hasMaterialBasis(P,Q,S))) # label("has-material-basis-dissective-on-third-argument-temporal") .
+
+all A all B  ((realizes(A,B)) -> (((exists T  (instanceOf(A,process,T))) & (exists T  (instanceOf(B,realizableEntity,T)))))) # label("realizes-domain-range") .
+
+all A all B all C  ((((specificallyDependsOn(A,B)) & (specificallyDependsOn(B,C)) & (-((A) = (C))))) -> (specificallyDependsOn(A,C))) # label("specifically-depends-on-transitive") .
+
+all S all C  ((specificallyDependsOn(S,C)) -> (-(exists W exists T  (((continuantPartOf(W,S,T)) & (continuantPartOf(W,C,T))))))) # label("specific-dependents-dont-share-parts-with-bearer-continuants") .
+
+all R all P  ((realizes(P,R)) -> (exists PROCT exists FIRST  (((occupiesTemporalRegion(P,PROCT)) & (hasFirstInstant(PROCT,FIRST)) & (eXistsAt(R,FIRST)))))) # label("realizable-exists-at-least-at-beginning-of-realization") .
+
+all A all B all T  ((hasMaterialBasis(A,B,T)) -> (((instanceOf(A,disposition,T)) & (instanceOf(B,materialEntity,T)) & (instanceOf(T,temporalRegion,T))))) # label("has-material-basis-domain-range") .
+
+all S all C  ((specificallyDependsOn(S,C)) -> (((exists T  (((eXistsAt(S,T)) & (eXistsAt(C,T))))) & (all T  ((eXistsAt(S,T)) -> (eXistsAt(C,T))))))) # label("s-depends-means-bearer-exists-when-dependent-exists") .
+
+all O  ((exists T  (instanceOf(O,role,T))) -> (all U  ((exists T  (instanceOf(O,U,T))) -> (all T  ((instanceOf(O,role,T)) <-> (instanceOf(O,U,T))))))) # label("all-role-types-are-rigid") .
+
+all B  ((exists T  (instanceOf(B,relationalQuality,T))) <-> (((exists C exists D  (((-((C) = (D))) & (inheresIn(B,C)) & (specificallyDependsOn(B,D))))) & (exists T  (instanceOf(B,quality,T)))))) # label("relational-quality-definition") .
+
+all A all B  ((inheresIn(A,B)) <-> (((specificallyDependsOn(A,B)) & (exists T  (((instanceOf(A,specificallyDependentContinuant,T)) & (instanceOf(B,independentContinuant,T)) & (-(instanceOf(B,spatialRegion,T))))))))) # label("inheres-in-definition") .
+
+all S  ((exists T  (instanceOf(S,specificallyDependentContinuant,T))) <-> (exists C exists T  (((instanceOf(S,continuant,T)) & (instanceOf(C,independentContinuant,T)) & (-(instanceOf(C,spatialRegion,T))) & (specificallyDependsOn(S,C)))))) # label("definition-of-specifically-dependent-continuant") .
+
+all M all D all B  ((((exists T  (instanceOf(M,materialEntity,T))) & (exists T  (instanceOf(D,disposition,T))) & (exists T  (instanceOf(B,materialEntity,T))) & (inheresIn(D,B)))) -> (all T  ((hasMaterialBasis(D,M,T)) -> (continuantPartOf(M,B,T))))) # label("material-basis-part-of-disposition-bearer") .
+
+all A all B  ((specificallyDependsOn(A,B)) -> (((exists T  (instanceOf(A,specificallyDependentContinuant,T))) & (exists T  (((instanceOf(B,specificallyDependentContinuant,T)) | (((instanceOf(B,independentContinuant,T)) & (-(instanceOf(B,spatialRegion,T))))))))))) # label("specifically-depends-on-domain-range") .
+
+all SDC all P all T  ((((instanceOf(SDC,specificallyDependentContinuant,T)) & (participatesIn(SDC,P,T)))) -> (exists TP exists IC  (((instanceOf(TP,temporalRegion,TP)) & (temporalPartOf(TP,T)) & (instanceOf(IC,independentContinuant,TP)) & (-(instanceOf(IC,spatialRegion,TP))) & (specificallyDependsOn(SDC,IC)) & (participatesIn(IC,P,TP)))))) # label("participation-of-specific-dependent-continuant") .
+
+
+

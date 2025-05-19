@@ -1,0 +1,103 @@
+%lastInstantOf, firstInstantOf, hasTemporalPart, hasProperTemporalPart
+
+set(prolog_style_variables)
+
+%all A all B  ((hasLastInstant(A,B)) <-> (lastInstantOf(B,A))) # label("has-last-instant-inverse-of-last-instant-of") .
+
+%all A all B  ((hasFirstInstant(A,B)) <-> (firstInstantOf(B,A))) # label("has-first-instant-inverse-of-first-instant-of") .
+
+%all A all B  ((temporalPartOf(A,B)) <-> (hasTemporalPart(B,A))) # label("temporal-part-of-inverse-of-has-temporal-part") .
+
+all A all B  ((temporalPartOf(A,B)) -> (occurrentPartOf(A,B))) # label("temporal-part-of-subproperty-of-occurrent-part-of") .
+
+all A  ((instanceOf(A,temporalRegion,A)) -> (temporalPartOf(A,A))) # label("temporal-part-of-is-reflexive-on-temporal-region") .
+
+%all A all B  ((properTemporalPartOf(A,B)) <-> (hasProperTemporalPart(B,A))) # label("proper-temporal-part-of-inverse-of-has-proper-temporal-part") .
+
+all TI all T  ((instanceOf(TI,temporalRegion,T)) -> (temporalPartOf(T,TI))) # label("time-once") .
+
+all A  ((exists T  (instanceOf(A,occurrent,T))) -> (temporalPartOf(A,A))) # label("temporal-part-of-is-reflexive-on-occurrent") .
+
+all A all B  ((((temporalPartOf(A,B)) & (temporalPartOf(B,A)))) -> ((A) = (B))) # label("temporal-part-of-is-antisymmetric") .
+
+all A all B  ((properTemporalPartOf(A,B)) -> (-(properTemporalPartOf(B,A)))) # label("proper-temporal-part-of-is-asymmetric") .
+
+all P all Q all R  ((((hasLastInstant(P,Q)) & (hasLastInstant(P,R)))) -> ((Q) = (R))) # label("has-last-instant-functional-on-second-argument") .
+
+all P all Q all R  ((((hasFirstInstant(P,Q)) & (hasFirstInstant(P,R)))) -> ((Q) = (R))) # label("has-first-instant-functional-on-second-argument") .
+
+all X all Y  ((properTemporalPartOf(X,Y)) <-> (((temporalPartOf(X,Y)) & (-((X) = (Y)))))) # label("definition-of-proper-temporal-part-of") .
+
+%all P all Q  ((((instanceOf(P,temporalInstant,P)) & (hasTemporalPart(P,Q)))) -> ((P) = (Q))) # label("temporal-instant-only-has-self-as-part") .
+all P all Q  ((((instanceOf(P,temporalInstant,P)) & (temporalPartOf(Q,P)))) -> ((P) = (Q))) # label("temporal-instant-only-has-self-as-part") .
+
+all P all Q all R all S  ((((instanceOf(P,Q,R)) & (temporalPartOf(S,R)))) -> (instanceOf(P,Q,S))) # label("instance-of-dissective-on-third-argument-temporal") .
+
+all A all B all C  ((((temporalPartOf(A,B)) & (temporalPartOf(B,C)))) -> (temporalPartOf(A,C))) # label("temporal-part-of-transitive") .
+
+all I  ((instanceOf(I,temporalInstant,I)) <-> (((hasFirstInstant(I,I)) & (hasLastInstant(I,I))))) # label("instant-first-and-last-instant-are-itself") .
+
+all A all U  ((exists T  (((instanceOf(A,temporalRegion,T)) & (instanceOf(A,U,T))))) <-> (instanceOf(A,U,A))) # label("temporal-regions-instance-of-at-self") .
+
+all P all Q  ((temporalPartOf(P,Q)) -> ((instanceOf(P,temporalRegion,P)) <-> (instanceOf(Q,temporalRegion,Q)))) # label("temporal-part-of.temporal-region<->temporal-region") .
+
+all A all B  ((hasLastInstant(A,B)) -> (((instanceOf(A,temporalRegion,A)) & (instanceOf(B,temporalInstant,B))))) # label("has-last-instant-domain-range") .
+
+all A all B all C  ((((properTemporalPartOf(A,B)) & (properTemporalPartOf(B,C)))) -> (properTemporalPartOf(A,C))) # label("proper-temporal-part-of-transitive") .
+
+all A all B  ((hasFirstInstant(A,B)) -> (((instanceOf(A,temporalRegion,A)) & (instanceOf(B,temporalInstant,B))))) # label("has-first-instant-domain-range") .
+
+all I1 all I2 all L1 all F2  ((((hasLastInstant(I1,L1)) & (hasFirstInstant(I2,F2)) & (precedes(L1,F2)))) -> (precedes(I1,I2))) # label("regions-precede-if-last-first-before-first-second") .
+
+all I  ((instanceOf(I,temporalRegion,I)) -> (exists T1 exists T2  (((hasFirstInstant(I,T1)) & (hasLastInstant(I,T2)))))) # label("region-has-first-and-last-time-point") .
+
+all T  ((instanceOf(T,temporalRegion,T)) -> (exists I  (((instanceOf(I,temporalInterval,I)) & (temporalPartOf(T,I)))))) # label("temporal-regions-are-part-of-interval") .
+
+all A all B  ((temporalPartOf(A,B)) -> (((exists T  (instanceOf(A,occurrent,T))) & (exists T  (instanceOf(B,occurrent,T)))))) # label("temporal-part-of-domain-range") .
+
+all T all FT all LT  ((((-(instanceOf(T,temporalInstant,T))) & (hasFirstInstant(T,FT)) & (hasLastInstant(T,LT)))) -> (precedes(FT,LT))) # label("first-time-point-precedes-last-time-point-except-for-instants") .
+
+all T1 all T2 all L1 all F2  ((((precedes(T1,T2)) & (hasLastInstant(T1,L1)) & (hasFirstInstant(T2,F2)) & (-((L1) = (F2))))) -> (precedes(L1,F2))) # label("regions-precede-mean-endpoints-precede-unless-they-coincide") .
+
+all P all Q  ((temporalPartOf(P,Q)) -> ((instanceOf(P,oneDimensionalTemporalRegion,P)) -> (instanceOf(Q,oneDimensionalTemporalRegion,Q)))) # label("temporal-part-of.one-dimensional-temporal-region->one-dimensional-temporal-region") .
+
+all T  ((((instanceOf(T,oneDimensionalTemporalRegion,T)))) -> (exists P  (((temporalPartOf(P,T)) & (instanceOf(P,temporalInterval,P)))))) # label("one-dimensional-temporal-has-at-least-one-interval-part") .
+
+%all P all Q  ((hasTemporalPart(P,Q)) -> ((instanceOf(P,zeroDimensionalTemporalRegion,P)) -> (instanceOf(Q,zeroDimensionalTemporalRegion,Q)))) # label("has-temporal-part.zero-dimensional-temporal-region->zero-dimensional-temporal-region") .
+all P all Q  ((temporalPartOf(Q,P)) -> ((instanceOf(P,zeroDimensionalTemporalRegion,P)) -> (instanceOf(Q,zeroDimensionalTemporalRegion,Q)))) # label("has-temporal-part.zero-dimensional-temporal-region->zero-dimensional-temporal-region") .
+
+all T1 all T2  ((((instanceOf(T1,temporalInstant,T1)) & (instanceOf(T2,temporalInstant,T2)))) -> (((precedes(T1,T2)) | (precedes(T2,T1)) | ((T1) = (T2))))) # label("temporal-instants-connex-related") .
+
+all I all T  ((instanceOf(I,temporalRegion,T)) -> (((instanceOf(I,zeroDimensionalTemporalRegion,T)) | (instanceOf(I,oneDimensionalTemporalRegion,T))))) # label("temporal-region-cover") .
+
+all I1 all I2 all L1 all F2  ((((-(instanceOf(I1,temporalInstant,I1))) & (-(instanceOf(I2,temporalInstant,I2))) & (hasLastInstant(I1,L1)) & (hasFirstInstant(I2,F2)) & ((L1) = (F2)))) -> (precedes(I1,I2))) # label("regions-precede-if-they-meet") .
+
+%all P all Q  ((hasTemporalPart(P,Q)) -> ((instanceOf(P,oneDimensionalTemporalRegion,P)) -> (((instanceOf(Q,oneDimensionalTemporalRegion,Q)) | (instanceOf(Q,zeroDimensionalTemporalRegion,Q)))))) # label("has-temporal-part.one-dimensional-temporal-region->or-one-dimensional-temporal-region-zero-dimensional-temporal-region") .
+all P all Q  ((temporalPartOf(Q,P)) -> ((instanceOf(P,oneDimensionalTemporalRegion,P)) -> (((instanceOf(Q,oneDimensionalTemporalRegion,Q)) | (instanceOf(Q,zeroDimensionalTemporalRegion,Q)))))) # label("has-temporal-part.one-dimensional-temporal-region->or-one-dimensional-temporal-region-zero-dimensional-temporal-region") .
+
+all L all I  ((((instanceOf(L,temporalInstant,L)) & (instanceOf(I,temporalRegion,I)) & (-(instanceOf(I,temporalInstant,I))) & (hasLastInstant(I,L)))) -> ((-(temporalPartOf(L,I))) <-> (precedes(I,L)))) # label("either-last-instant-part-or-preceded-by") .
+
+all F all I  ((((instanceOf(F,temporalInstant,F)) & (instanceOf(I,temporalRegion,I)) & (-(instanceOf(I,temporalInstant,I))) & (hasFirstInstant(I,F)))) -> ((-(temporalPartOf(F,I))) <-> (precedes(F,I)))) # label("either-first-instant-part-or-precedes") .
+
+all T1 all T2  ((((instanceOf(T1,temporalInterval,T1)) & (instanceOf(T2,temporalInterval,T2)) & (-(exists PART  (((temporalPartOf(PART,T1)) & (temporalPartOf(PART,T2)))))))) -> (((precedes(T1,T2)) | (precedes(T2,T1))))) # label("temporal-intervals-dont-overlap-implies-one-precedes-the-other") .
+
+all FI all I  ((((instanceOf(FI,temporalInstant,FI)) & (instanceOf(I,temporalRegion,I)) & (-(instanceOf(I,temporalInstant,I))))) -> ((hasFirstInstant(I,FI)) -> (all IP  ((((temporalPartOf(IP,I)) & (-(temporalPartOf(FI,IP))))) -> (precedes(FI,IP)))))) # label("first-instant-for-temporal-regions-precedes-all-parts-of-region-other-than-self") .
+
+all LI all I  ((((instanceOf(LI,temporalInstant,LI)) & (instanceOf(I,temporalRegion,I)) & (-(instanceOf(I,temporalInstant,I))))) -> ((hasLastInstant(I,LI)) -> (((all IP  ((((temporalPartOf(IP,I)) & (-(temporalPartOf(LI,IP))))) -> (precedes(IP,LI)))))))) # label("last-instant-for-temporal-regions-preceded-by-all-parts-of-region-other-than-self") .
+
+all I all START all END  ((((instanceOf(I,temporalInterval,I)) & (hasFirstInstant(I,START)) & (hasLastInstant(I,END)))) -> (-(exists GAP exists GAPSTART exists GAPEND  (((hasFirstInstant(GAP,GAPSTART)) & (hasLastInstant(GAP,GAPEND)) & (precedes(GAPEND,END)) & (precedes(START,GAPSTART)) & (-(temporalPartOf(GAP,I)))))))) # label("no-internal-gaps-in-interval") .
+
+all X all Y  ((((instanceOf(X,temporalRegion,X)) & (instanceOf(Y,temporalRegion,Y)))) -> ((properTemporalPartOf(X,Y)) -> (exists Z  (((properTemporalPartOf(Z,Y)) & (-(exists OVERLAP  (((instanceOf(OVERLAP,temporalRegion,OVERLAP)) & (temporalPartOf(OVERLAP,X)) & (temporalPartOf(OVERLAP,Z))))))))))) # label("temporal-part-of-has-weak-supplementation") .
+
+all T all R  ((((instanceOf(T,temporalInstant,T)) & (instanceOf(R,temporalInterval,R)))) -> (((hasFirstInstant(R,T)) | (hasLastInstant(R,T)) | ((exists F exists L  (((instanceOf(R,temporalInterval,R)) & (hasFirstInstant(R,F)) & (hasLastInstant(R,L)) & (precedes(T,L)) & (precedes(F,T))))) <-> (properTemporalPartOf(T,R)))))) # label("temporal-instants-between-first-and-last-instant-of-interval-part-of-that-interval") .
+
+all I1 all I2  ((((instanceOf(I1,temporalInterval,I1)) & (instanceOf(I2,temporalInterval,I2)))) -> ((exists F exists L  (((hasFirstInstant(I1,F)) & (hasFirstInstant(I2,F)) & (hasLastInstant(I1,L)) & (hasLastInstant(I2,L)) & ((temporalPartOf(L,I1)) <-> (temporalPartOf(L,I2))) & ((temporalPartOf(F,I1)) <-> (temporalPartOf(F,I2)))))) -> ((I1) = (I2)))) # label("interval-identity") .
+
+all X all Y  ((((instanceOf(X,temporalRegion,X)) & (instanceOf(Y,temporalRegion,Y)))) -> ((exists O  (((temporalPartOf(O,X)) & (temporalPartOf(O,Y))))) -> (exists Z  (((instanceOf(Z,temporalRegion,Z)) & (all W  ((((instanceOf(W,temporalRegion,W)) & (instanceOf(Z,temporalRegion,Z)))) -> ((temporalPartOf(W,Z)) <-> (((temporalPartOf(W,X)) & (temporalPartOf(W,Y)))))))))))) # label("temporal-part-of-has-a-unique-product") .
+
+all I all START all END  ((((instanceOf(I,temporalInterval,I)) & (hasFirstInstant(I,START)) & (hasLastInstant(I,END)))) -> (-(exists GAP exists GAPSTART exists GAPEND  (((-(instanceOf(GAP,temporalInstant,GAP))) & (hasFirstInstant(GAP,GAPSTART)) & (hasLastInstant(GAP,GAPEND)) & (((precedes(GAPEND,END)) | (((temporalPartOf(END,I)) & ((GAPEND) = (END)))))) & (((precedes(START,GAPSTART)) | (((temporalPartOf(START,I)) & ((GAPSTART) = (START)))))) & (-(temporalPartOf(GAP,I)))))))) # label("no-extended-temporal-region-gaps-in-interval") .
+
+all I all START all END  ((((instanceOf(I,temporalInterval,I)) & (hasFirstInstant(I,START)) & (hasLastInstant(I,END)))) -> (all T1 all T2  ((((temporalPartOf(T1,I)) & (temporalPartOf(T2,I)) & (instanceOf(T1,temporalInstant,T1)) & (instanceOf(T2,temporalInstant,T2)) & (precedes(T1,T2)) & (-(exists T3  (((instanceOf(T3,temporalInstant,T3)) & (precedes(T1,T3)) & (precedes(T3,T2)))))))) -> (exists FILL  (((instanceOf(FILL,temporalInterval,FILL)) & (hasFirstInstant(FILL,T1)) & (hasLastInstant(FILL,T2)) & (temporalPartOf(FILL,I)))))))) # label("interval-covered-by-interval-parts") .
+
+
+

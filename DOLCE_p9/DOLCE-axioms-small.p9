@@ -1,0 +1,7 @@
+(all X all Y ((ab(X) & ab(Y) & -(p(X,Y))) -> (exists Z (dif(Z,X,Y))))).
+%((sum(t1,s1,t1) <-> (((ab(t1) & ab(s1) & ab(t1)) | (pd(t1) & pd(s1) & pd(t1))) & (all W (ov(W,t1) <-> (ov(W,s1) | ov(W,t1))))))).
+
+%(sum(t1,s1,t1) <-> (((ab(t1) & ab(s1) & ab(t1)) | (pd(t1) & pd(s1) & pd(t1))) & (all W (ov(W,t1) <-> (ov(W,s1) | ov(W,s1)))))) # label(binary_sum_definition_Dd18).
+%(sum(t3,t2,t2) <-> (((ab(t3) & ab(t2) & ab(t2)) | (pd(t3) & pd(t2) & pd(t2))) & (all W (ov(W,t3) <-> (ov(W,t2) | ov(W,t2)))))) # label(binary_sum_definition_Dd18).
+
+%(all X all Y all Z (sum(Z,X,Y) <-> (((ab(Z) & ab(X) & ab(Y)) | (pd(Z) & pd(X) & pd(Y))) & (all W (ov(W,Z) <-> (ov(W,X) | ov(W,Y))))))) # label(binary_sum_definition_Dd18).

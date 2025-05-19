@@ -1,11 +1,9 @@
-from copy import deepcopy
-import multiprocessing.pool
-# import multiprocessing
-# import multiprocess as multiprocessing
 import re
 import time
+import multiprocessing.pool
+
+from copy import deepcopy
 from typing import Literal 
-import concurrent
 from tqdm import tqdm
 from lark import Lark, Tree, Token, Transformer
 from lark.visitors import Visitor, Interpreter
@@ -13,9 +11,9 @@ from lark.visitors import Visitor, Interpreter
 from basic_formulas_manipulation import ReduceLogicalSignature, RemoveLabels, RemoveLines, treeExplainerRED, treeExplainerYELLOW, treeExplainerReturning, treeExplainerReturningNoExpl, P9FreeVariablesExtractor
 from check_by_range_restriction import evaluateQuantifierBound, toBoundedMinifiedNNF, toBoundedMinifiedPCNF, toBoundedPDNF
 from check_modulo_signature_equivalence import find_equivalent, intersects_equivalence_classes
-
 from join_algorithms import Relation
 from model import prover9_parser, Signature, Model, P9ModelReader
+
 
 POSSIBLE_OPTIONS = {"equivalence", "range"}
 
@@ -34,44 +32,6 @@ POSSIBLE_OPTIONS = {"equivalence", "range"}
 # text = 'all X A(X,Y) & exists Z P(Z) .'
 # text = 'all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l).'
 # text = 'all X A(X,Y,c2) | - exists Z P(X,Z,c) .'
-
-# def run_fastest(f1, f2):
-#     queue = multiprocessing.Queue()
-
-#     p1 = multiprocessing.Process(target=f1, args=(queue,))
-#     p2 = multiprocessing.Process(target=f2, args=(queue,))
-
-#     p1.start()
-#     p2.start()
-
-#     # Get the first result
-#     result = queue.get()
-
-#     # Terminate both processes just in case both are still running
-#     p1.terminate()
-#     p2.terminate()
-
-#     # Join to clean up the resources
-#     p1.join()
-#     p2.join()
-
-#     return result
-
-def run_fastest(f1, f2):
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [executor.submit(f) for f in (f1, f2)]
-        done, not_done = concurrent.futures.wait(
-            futures, return_when=concurrent.futures.FIRST_COMPLETED)
-
-        # Get the result of the first completed future
-        result = next(iter(done)).result()
-
-        print("Got result", result)
-        # Cancel remaining futures if possible
-        for future in not_done:
-            future.cancel()
-
-    return result
 
 
 class P9Explainer(Visitor):
@@ -393,7 +353,6 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
     axioms_false = 0
     axioms_unexpected = 0
     
-    # for line in tqdm(lines):
     for i,line in enumerate(lines):
         no_comment_line = re.sub("%.*", "", line) # the regex "%.*\n" is wrong because it will not match the last line of a file
         no_comment_line = no_comment_line.replace("\n","")
@@ -420,15 +379,6 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
         print(f"\n evaluating line {i} of {len(lines)} lines: Axiom is  >>>{axiom_text}<<< against given model...")
         
         
-        # if "range" in options:
-        #     # axiomsAST = ReduceLogicalSignature().visit_repeatedly(axiomsAST)
-        #     # axiomsAST = toBoundedMinifiedPCNF(simple).adjust_transform_repeatedly(axiomsAST)
-            
-        #     axiomsAST = toBoundedMinifiedNNF().adjust_transform_repeatedly(axiomsAST) # <- nukes on continuant-part-of-has-weak-supplementation-at-a-time
-            
-        #     # axiomsAST = toBoundedPDNF().adjust_transform_repeatedly(axiomsAST)
-            
-            
         def f_equivalences(axiomsAST_for_equivalence, p9evaluator_equivalence):
             print("Started a thread with the equivalence strategy")
             try:
@@ -446,18 +396,11 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
             except Exception as e:
                 raise TypeError(f"Got an exception during f_option: >>>{e}<<<")
             return evaluation, axiomsAST_for_first_thread#, f"The strategy called with the options {options} was faster than the default equivalence strategy"
-        # try: 
+        
 
-            # future = run_fastest(f_equivalences, f_options)
-            # evaluation, message
-            # print(message)
-            
-        
-        # within the different threads, the AST state will be modified during the evaluation procedure. If a thread is interrupted, the AST state will stay modified and feeding it to the second thread may lead to unexpected result. So I have to copy the AST, so I have two independent 'clean' copies on which the evaluation can start as from a blank slate.
-        
-        
         timeoutOccurred = False
         if not no_timeout:
+            # within the different threads, the AST state will be modified during the evaluation procedure. If a thread is interrupted, the AST state will stay modified and feeding it to the second thread may lead to unexpected result. So I have to copy the AST, so I have two independent 'clean' copies on which the evaluation can start as from a blank slate.
             axiomsAST_for_first_thread = deepcopy(axiomsAST)
             axiomsAST_for_equivalence = axiomsAST
             evaluation = "possible time out"
@@ -643,21 +586,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
     check_model_against_axioms(args.model_file, args.axioms_file, args.options, args.timeout, args.timeout_aux, args.no_timeout, args.break_on_false)
     
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/continuant-mereology_toUP.p9", ["range"], breakOnFalse = True)
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/existence-instantiation_toUP.p9", ["range"], breakOnFalse = True)
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/generic-dependence_toUP.p9", ["range"], breakOnFalse = True)
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/history_toUP.p9", ["range"], breakOnFalse = True)
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/material-entity_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/continuant-mereology_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/existence-instantiation_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/generic-dependence_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/history_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/material-entity_toUP.p9", ["range"], breakOnFalse = True)
     
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/occurrent-mereology_toUP.p9", ["range"], breakOnFalse = True)
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/order_toUP.p9", ["range"], breakOnFalse = True, timeout=60)
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/participation_toUP.p9", ["range"], breakOnFalse = True)
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/spatial_toUP.p9", ["range"], breakOnFalse = True, timeout=60)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/occurrent-mereology_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/order_toUP.p9", ["range"], breakOnFalse = True, timeout=60)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/participation_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/spatial_toUP.p9", ["range"], breakOnFalse = True, timeout=60)
     
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/spatiotemporal_toUP.p9", ["range"], breakOnFalse = True)
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/specific-dependency_toUP.p9", ["range"], breakOnFalse = True)
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/temporal-region_toUP.p9", ["range"], breakOnFalse = True)
-    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/elaborated_files/universal-declaration_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/spatiotemporal_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/specific-dependency_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/temporal-region_toUP.p9", ["range"], breakOnFalse = True)
+    # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO_p9/BFO2020_elaborated_axiom_files/universal-declaration_toUP.p9", ["range"], breakOnFalse = True)
     
     # check_model_against_axioms(r"BFO_p9\BFO-model-from-repo.p9", r"BFO-test-axioms.p9", ["equivalence"], breakOnFalse = True)
     

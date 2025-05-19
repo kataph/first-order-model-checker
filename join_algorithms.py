@@ -1,5 +1,6 @@
-from functools import partial
 import random
+
+from functools import partial
 from time import perf_counter
 from typing import Any
 

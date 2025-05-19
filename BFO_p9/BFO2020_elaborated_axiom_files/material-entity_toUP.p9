@@ -1,0 +1,28 @@
+%%%commented hasMemberPart
+
+set(prolog_style_variables)
+
+%all T all A all B  ((memberPartOf(A,B,T)) <-> (hasMemberPart(B,A,T))) # label("member-part-of-inverse-of-has-member-part") .
+
+all P all Q all R all S  ((((memberPartOf(P,Q,R)) & (temporalPartOf(S,R)))) -> (memberPartOf(P,Q,S))) # label("member-part-of-dissective-on-third-argument-temporal") .
+
+all AG all T  ((instanceOf(AG,objectAggregate,T)) -> (exists O1  (((instanceOf(O1,object,T)) & (memberPartOf(O1,AG,T)))))) # label("an-object-aggregate-always-has-members") .
+
+all A all B all T  ((memberPartOf(A,B,T)) -> (((instanceOf(A,object,T)) & (instanceOf(B,objectAggregate,T)) & (instanceOf(T,temporalRegion,T))))) # label("member-part-of-domain-range") .
+
+all F all T  ((instanceOf(F,fiatObjectPart,T)) <-> (exists O  (((instanceOf(O,object,T)) & (properContinuantPartOf(F,O,T)) & (-(instanceOf(F,immaterialEntity,T))))))) # label("fiat-object-part-part-of-object") .
+
+all I all T  ((instanceOf(I,immaterialEntity,T)) <-> (((instanceOf(I,independentContinuant,T)) & (-(exists M  (((instanceOf(M,materialEntity,T)) & (continuantPartOf(M,I,T))))))))) # label("immaterial-entity-definition") .
+
+all C1  ((exists T  (instanceOf(C1,independentContinuant,T))) <-> (((exists T  (instanceOf(C1,continuant,T))) & (-(exists C2 exists T  (((specificallyDependsOn(C1,C2)) | (genericallyDependsOn(C1,C2,T))))))))) # label("definition-of-independent-continuant") .
+
+all AG  ((exists T  (instanceOf(AG,objectAggregate,T))) -> (exists O1 exists O2 exists T  (((-((O1) = (O2))) & (instanceOf(O1,object,T)) & (memberPartOf(O1,AG,T)) & (instanceOf(O2,object,T)) & (memberPartOf(O2,AG,T)))))) # label("an-object-aggregate-has-at-least-2-members-at-some-time") .
+
+all T all B all X  ((((properContinuantPartOf(X,B,T)) & (instanceOf(B,objectAggregate,T)))) -> (exists O  (((memberPartOf(O,B,T)) & (exists Z  (((continuantPartOf(Z,X,T)) & (continuantPartOf(Z,O,T))))))))) # label("all-parts-of-an-aggregate-overlap-some-member") .
+
+all M all T  ((((instanceOf(M,materialEntity,T)) & (exists MP  (((continuantPartOf(MP,M,T)) & (-((MP) = (M)))))))) -> (exists MP  (((-((MP) = (M))) & (continuantPartOf(MP,M,T)) & (-(instanceOf(MP,immaterialEntity,T))))))) # label("material-entity-has-at-least-one-non-immaterial-entity-as-proper-part") .
+
+all B all C all T  ((memberPartOf(B,C,T)) <-> (((instanceOf(B,object,T)) & (instanceOf(C,objectAggregate,T)) & (properContinuantPartOf(B,C,T)) & (all D  ((memberPartOf(D,C,T)) -> ((((B) = (D)) | (-(exists Z  (((continuantPartOf(Z,B,T)) & (continuantPartOf(Z,D,T))))))))))))) # label("any-member-of-aggregate-is-disjoint-from-the-rest") .
+
+
+

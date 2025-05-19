@@ -1,0 +1,54 @@
+%%% commented/modified hasOccurrentPart, hasProperOccurrentPart
+
+set(prolog_style_variables)
+
+%all A all B  ((occurrentPartOf(A,B)) <-> (hasOccurrentPart(B,A))) # label("occurrent-part-of-inverse-of-has-occurrent-part") .
+
+%all A all B  ((properOccurrentPartOf(A,B)) <-> (hasProperOccurrentPart(B,A))) # label("proper-occurrent-part-of-inverse-of-has-proper-occurrent-part") .
+
+all A  ((exists T  (instanceOf(A,occurrent,T))) -> (occurrentPartOf(A,A))) # label("occurrent-part-of-is-reflexive-on-occurrent") .
+
+all A all B  ((((occurrentPartOf(A,B)) & (occurrentPartOf(B,A)))) -> ((A) = (B))) # label("occurrent-part-of-is-antisymmetric") .
+
+all X all Y  ((properOccurrentPartOf(X,Y)) <-> (((occurrentPartOf(X,Y)) & (-((X) = (Y)))))) # label("definition-of-proper-occurrent-part-of") .
+
+all A all B all C  ((((occurrentPartOf(A,B)) & (occurrentPartOf(B,C)))) -> (occurrentPartOf(A,C))) # label("occurrent-part-of-transitive") .
+
+all O1 all O2  ((occurrentPartOf(O1,O2)) -> (all T  ((eXistsAt(O1,T)) -> (eXistsAt(O2,T))))) # label("occurrent-part-of-whole-lasts-longer") .
+
+all P all Q  ((occurrentPartOf(P,Q)) -> ((instanceOf(P,temporalRegion,P)) <-> (instanceOf(Q,temporalRegion,Q)))) # label("occurrent-part-of.temporal-region<->temporal-region") .
+
+all A all B  ((occurrentPartOf(A,B)) -> (((exists T  (instanceOf(A,occurrent,T))) & (exists T  (instanceOf(B,occurrent,T)))))) # label("occurrent-part-of-domain-range") .
+
+all P all Q  ((occurrentPartOf(P,Q)) -> ((exists T  (instanceOf(P,process,T))) -> (exists T  (instanceOf(Q,process,T))))) # label("occurrent-part-of.process->process") .
+
+all A all B  ((properTemporalPartOf(A,B)) -> (((exists T  (instanceOf(A,occurrent,T))) & (exists T  (instanceOf(B,occurrent,T)))))) # label("proper-temporal-part-of-domain-range") .
+
+all A all B  ((properOccurrentPartOf(A,B)) -> (((exists T  (instanceOf(A,occurrent,T))) & (exists T  (instanceOf(B,occurrent,T)))))) # label("proper-occurrent-part-of-domain-range") .
+
+all P  ((exists T  (instanceOf(P,process,T))) -> (exists PB exists T  (((instanceOf(PB,processBoundary,T)) & (occurrentPartOf(PB,P)))))) # label("every-process-has-a-process-boundary") .
+
+all B all C  ((((instanceOf(B,temporalRegion,B)) & (instanceOf(C,temporalRegion,C)))) -> ((temporalPartOf(B,C)) <-> (occurrentPartOf(B,C)))) # label("definition-of-temporal-part-for-temporal-regions") .
+
+%all P all Q  ((hasOccurrentPart(P,Q)) -> ((exists T  (instanceOf(P,processBoundary,T))) -> (exists T  (instanceOf(Q,processBoundary,T))))) # label("has-occurrent-part.process-boundary->process-boundary") .
+all P all Q  ((occurrentPartOf(Q,P)) -> ((exists T  (instanceOf(P,processBoundary,T))) -> (exists T  (instanceOf(Q,processBoundary,T))))) # label("has-occurrent-part.process-boundary->process-boundary") .
+
+all P all Q  ((occurrentPartOf(P,Q)) -> ((exists T  (instanceOf(P,spatiotemporalRegion,T))) <-> (exists T  (instanceOf(Q,spatiotemporalRegion,T))))) # label("occurrent-part-of.spatiotemporal-region<->spatiotemporal-region") .
+
+%all P all Q  ((hasOccurrentPart(P,Q)) -> ((exists T  (instanceOf(P,process,T))) -> (exists T  (((instanceOf(Q,process,T)) | (instanceOf(Q,processBoundary,T))))))) # label("has-occurrent-part.process->or-process-process-boundary") .
+all P all Q  ((occurrentPartOf(Q,P)) -> ((exists T  (instanceOf(P,process,T))) -> (exists T  (((instanceOf(Q,process,T)) | (instanceOf(Q,processBoundary,T))))))) # label("has-occurrent-part.process->or-process-process-boundary") .
+
+all P all Q  ((occurrentPartOf(P,Q)) -> ((exists T  (instanceOf(P,processBoundary,T))) -> (exists T  (((instanceOf(Q,process,T)) | (instanceOf(Q,processBoundary,T))))))) # label("occurrent-part-of.process-boundary->or-process-process-boundary") .
+
+all PB  ((exists T  (instanceOf(PB,processBoundary,T))) <-> (((exists P  (((temporalPartOf(PB,P)) & (exists T  (instanceOf(P,process,T)))))) & (exists T  (((occupiesTemporalRegion(PB,T)) & (instanceOf(T,temporalInstant,T)))))))) # label("process-boundary-definition") .
+
+all X all Y  ((exists T  (((instanceOf(X,occurrent,T)) & (instanceOf(Y,occurrent,T)) & (instanceOf(T,temporalRegion,T))))) -> ((exists W  (((occurrentPartOf(W,X)) & (occurrentPartOf(W,Y))))) -> (exists Z  (all W  ((occurrentPartOf(W,Z)) <-> (((occurrentPartOf(W,X)) & (occurrentPartOf(W,Y))))))))) # label("occurrent-part-of-has-a-unique-product") .
+
+all P  ((exists TP  (instanceOf(P,process,TP))) -> (exists PB exists TB exists TP  (((occupiesTemporalRegion(P,TP)) & (occurrentPartOf(PB,P)) & (occupiesTemporalRegion(PB,TB)) & (instanceOf(PB,processBoundary,TB)) & (exists LTP exists FTP  (((hasFirstInstant(TP,FTP)) & (hasLastInstant(TP,LTP)) & ((((TB) = (FTP)) | ((TB) = (LTP))))))))))) # label("process-bounds-at-first-or-last-instant") .
+
+all B all C  ((((exists T  (instanceOf(B,spatiotemporalRegion,T))) & (exists T  (instanceOf(C,spatiotemporalRegion,T))))) -> ((temporalPartOf(B,C)) <-> (exists TB exists TC  (((temporallyProjectsOnto(B,TB)) & (temporallyProjectsOnto(C,TC)) & (occurrentPartOf(TB,TC)) & (all TP  ((((occurrentPartOf(TP,TB)) & (exists S  (spatiallyProjectsOnto(B,S,TP))))) -> (exists S  (((spatiallyProjectsOnto(B,S,TP)) & (spatiallyProjectsOnto(C,S,TP)))))))))))) # label("definition-of-temporal-part-spatiotemporal-regions") .
+
+all ST1 all ST2  ((((exists T  (instanceOf(ST1,spatiotemporalRegion,T))) & (exists T  (instanceOf(ST2,spatiotemporalRegion,T))))) -> ((occurrentPartOf(ST1,ST2)) <-> (((exists T1 exists T2  (((temporallyProjectsOnto(ST1,T1)) & (temporallyProjectsOnto(ST2,T2)) & (temporalPartOf(T1,T2))))) & (all T  ((eXistsAt(ST1,T)) -> (exists S1 exists S2 exists TP  (((temporalPartOf(TP,T)) & (spatiallyProjectsOnto(ST1,S1,TP)) & (spatiallyProjectsOnto(ST2,S2,TP)) & (continuantPartOf(S1,S2,TP))))))))))) # label("spatiotemporal-occurrent-part-of-definition") .
+
+
+

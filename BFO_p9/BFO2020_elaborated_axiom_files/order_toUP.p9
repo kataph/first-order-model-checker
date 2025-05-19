@@ -1,0 +1,40 @@
+% precededBy commentato
+% cambiato nome a O1P e O2P
+
+set(prolog_style_variables)
+
+%all A all B  ((precedes(A,B)) <-> (precededBy(B,A))) # label("precedes-inverse-of-preceded-by") .
+
+all A all B  ((precedes(A,B)) -> (-(precedes(B,A)))) # label("precedes-antisymmetric") .
+
+all A all B all C  ((((precedes(A,B)) & (precedes(B,C)))) -> (precedes(A,C))) # label("precedes-transitive") .
+
+all I1 all I2 all L1 all F2  ((((hasLastInstant(I1,L1)) & (hasFirstInstant(I2,F2)) & (precedes(L1,F2)))) -> (precedes(I1,I2))) # label("regions-precede-if-last-first-before-first-second") .
+
+all A all B  ((precedes(A,B)) -> (((exists T  (instanceOf(A,occurrent,T))) & (exists T  (instanceOf(B,occurrent,T)))))) # label("precedes-domain-range") .
+
+%all O1 all O2 all O1P all O2P  ((((occurrentPartOf(O1P,O1)) & (occurrentPartOf(O2P,O2)) & (precedes(O1,O2)))) -> (precedes(O1P,O2P))) # label("part-of-something-that-precedes-precedes") .
+all O1 all O2 all OP1 all OP2  ((((occurrentPartOf(OP1,O1)) & (occurrentPartOf(OP2,O2)) & (precedes(O1,O2)))) -> (precedes(OP1,OP2))) # label("part-of-something-that-precedes-precedes") .
+
+all T all FT all LT  ((((-(instanceOf(T,temporalInstant,T))) & (hasFirstInstant(T,FT)) & (hasLastInstant(T,LT)))) -> (precedes(FT,LT))) # label("first-time-point-precedes-last-time-point-except-for-instants") .
+
+all T1 all T2 all L1 all F2  ((((precedes(T1,T2)) & (hasLastInstant(T1,L1)) & (hasFirstInstant(T2,F2)) & (-((L1) = (F2))))) -> (precedes(L1,F2))) # label("regions-precede-mean-endpoints-precede-unless-they-coincide") .
+
+all P all Q  ((((precedes(P,Q)) | (precedes(Q,P)))) -> (-(exists OVERLAP  (((temporalPartOf(OVERLAP,P)) & (temporalPartOf(OVERLAP,Q))))))) # label("precedes-doesnt-overlap") .
+
+all T1 all T2  ((((instanceOf(T1,temporalInstant,T1)) & (instanceOf(T2,temporalInstant,T2)))) -> (((precedes(T1,T2)) | (precedes(T2,T1)) | ((T1) = (T2))))) # label("temporal-instants-connex-related") .
+
+all I1 all I2 all L1 all F2  ((((-(instanceOf(I1,temporalInstant,I1))) & (-(instanceOf(I2,temporalInstant,I2))) & (hasLastInstant(I1,L1)) & (hasFirstInstant(I2,F2)) & ((L1) = (F2)))) -> (precedes(I1,I2))) # label("regions-precede-if-they-meet") .
+
+all L all I  ((((instanceOf(L,temporalInstant,L)) & (instanceOf(I,temporalRegion,I)) & (-(instanceOf(I,temporalInstant,I))) & (hasLastInstant(I,L)))) -> ((-(temporalPartOf(L,I))) <-> (precedes(I,L)))) # label("either-last-instant-part-or-preceded-by") .
+
+all F all I  ((((instanceOf(F,temporalInstant,F)) & (instanceOf(I,temporalRegion,I)) & (-(instanceOf(I,temporalInstant,I))) & (hasFirstInstant(I,F)))) -> ((-(temporalPartOf(F,I))) <-> (precedes(F,I)))) # label("either-first-instant-part-or-precedes") .
+
+all T1 all T2  ((((instanceOf(T1,temporalInterval,T1)) & (instanceOf(T2,temporalInterval,T2)) & (-(exists PART  (((temporalPartOf(PART,T1)) & (temporalPartOf(PART,T2)))))))) -> (((precedes(T1,T2)) | (precedes(T2,T1))))) # label("temporal-intervals-dont-overlap-implies-one-precedes-the-other") .
+
+all O1 all O2  ((exists T1 exists T2  (((((occupiesTemporalRegion(O1,T1)) | (temporallyProjectsOnto(O1,T1)) | ((T1) = (O1)))) & (((occupiesTemporalRegion(O2,T2)) | (temporallyProjectsOnto(O2,T2)) | ((T2) = (O2)))) & (precedes(T1,T2))))) <-> (precedes(O1,O2))) # label("occurrents-precedes-iff-temporal-precedes") .
+
+all O1 all O2 all T1 all T2  ((((occupiesTemporalRegion(O1,T1)) & (occupiesTemporalRegion(O2,T2)) & (instanceOf(T1,temporalInterval,T1)) & (instanceOf(T2,temporalInterval,T2)) & (-(exists PART  (((temporalPartOf(PART,T1)) & (temporalPartOf(PART,T2)))))))) -> (((precedes(O1,O2)) | (precedes(O2,O1))))) # label("process-temporal-regions-on-temporal-intervals-dont-overlap-implies-one-precedes-the-other") .
+
+
+

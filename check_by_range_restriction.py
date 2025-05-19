@@ -10,7 +10,6 @@ from itertools import product
 from model import prover9_parser
 from join_algorithms import Relation, hash_join, intersection_join
 
-
 from basic_formulas_manipulation import BinaryOpSimplificator, ToDisjunctiveNormalForm, ToMiniscoped, ToMiniscopedDNF, ToMiniscopedNNF, ToMiniscopedPCNF, ToMiniscopedPDNF, ToMiniscopedPNNF, ToPrenex, ToPrenexDNF, ToPrenexNNF, ToReversePrenex, ToReversePrenexCNF, P9FreeVariablesExtractor, ToPrenexCNF, ToUniqueVariables, BINARY_OPS, dual_quantifier, dual_op, test_with_parsing, treeExplainer, treeExplainerRED, treeExplainerGREEN, treeExplainerYELLOW, treeExplainerReturning, my_logger, RemoveLines, ToString, get_existential_closure, print_tree
 
 

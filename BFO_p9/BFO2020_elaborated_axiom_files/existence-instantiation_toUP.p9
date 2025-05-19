@@ -1,0 +1,24 @@
+
+
+set(prolog_style_variables)
+
+all P  ((particular(P)) -> (exists T  (eXistsAt(P,T)))) # label("if-you-are-a-particular-you-exist-at-some-time") .
+
+all U  ((universal(U)) -> (exists P exists T  (instanceOf(P,U,T)))) # label("every-universal-is-instantiated-at-some-time") .
+
+all P all Q all R  ((((eXistsAt(P,Q)) & (continuantPartOf(R,P,Q)))) -> (eXistsAt(R,Q))) # label("exists-at-dissective-on-first-argument-continuant") .
+
+all P all Q all R all S  ((((instanceOf(P,Q,R)) & (temporalPartOf(S,R)))) -> (instanceOf(P,Q,S))) # label("instance-of-dissective-on-third-argument-temporal") .
+
+all I all T  ((eXistsAt(I,T)) -> (((particular(I)) & (particular(T)) & (instanceOf(T,temporalRegion,T))))) # label("exists-at-domain-range") .
+
+all I all U all T  ((instanceOf(I,U,T)) -> (((particular(I)) & (universal(U)) & (instanceOf(T,temporalRegion,T))))) # label("instance-of-domain-range") .
+
+all T  ((instanceOf(T,temporalRegion,T)) -> (exists U exists I  (((-((I) = (T))) & (universal(U)) & (particular(I)) & (instanceOf(I,U,T)))))) # label("something-always-exists") .
+
+all M  ((exists T  (instanceOf(M,materialEntity,T))) -> (exists T  (((instanceOf(T,oneDimensionalTemporalRegion,T)) & (eXistsAt(M,T)))))) # label("material-entities-exist-at-one-dimensional-temporal-regions") .
+
+all A all T  ((exists U  (((universal(U)) & (instanceOf(A,U,T)) & (instanceOf(T,temporalRegion,T))))) <-> (((particular(A)) & (instanceOf(T,temporalRegion,T)) & (eXistsAt(A,T))))) # label("instantiation-existence") .
+
+
+

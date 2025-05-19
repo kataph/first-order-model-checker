@@ -1,0 +1,220 @@
+
+
+set(prolog_style_variables)
+
+universal(role) # label("role-is-a-universal") .
+
+universal(site) # label("site-is-a-universal") .
+
+universal(object) # label("object-is-a-universal") .
+
+universal(history) # label("history-is-a-universal") .
+
+universal(process) # label("process-is-a-universal") .
+
+universal(quality) # label("quality-is-a-universal") .
+
+universal(function) # label("function-is-a-universal") .
+
+universal(fiatLine) # label("fiat-line-is-a-universal") .
+
+universal(occurrent) # label("occurrent-is-a-universal") .
+
+universal(continuant) # label("continuant-is-a-universal") .
+
+universal(fiatPoint) # label("fiat-point-is-a-universal") .
+
+universal(disposition) # label("disposition-is-a-universal") .
+
+universal(fiatSurface) # label("fiat-surface-is-a-universal") .
+
+universal(spatialRegion) # label("spatial-region-is-a-universal") .
+
+universal(materialEntity) # label("material-entity-is-a-universal") .
+
+universal(temporalRegion) # label("temporal-region-is-a-universal") .
+
+universal(fiatObjectPart) # label("fiat-object-part-is-a-universal") .
+
+universal(objectAggregate) # label("object-aggregate-is-a-universal") .
+
+universal(processBoundary) # label("process-boundary-is-a-universal") .
+
+universal(temporalInstant) # label("temporal-instant-is-a-universal") .
+
+universal(immaterialEntity) # label("immaterial-entity-is-a-universal") .
+
+universal(realizableEntity) # label("realizable-entity-is-a-universal") .
+
+universal(temporalInterval) # label("temporal-interval-is-a-universal") .
+
+universal(relationalQuality) # label("relational-quality-is-a-universal") .
+
+universal(spatiotemporalRegion) # label("spatiotemporal-region-is-a-universal") .
+
+universal(independentContinuant) # label("independent-continuant-is-a-universal") .
+
+universal(continuantFiatBoundary) # label("continuant-fiat-boundary-is-a-universal") .
+
+universal(oneDimensionalSpatialRegion) # label("one-dimensional-spatial-region-is-a-universal") .
+
+universal(twoDimensionalSpatialRegion) # label("two-dimensional-spatial-region-is-a-universal") .
+
+universal(oneDimensionalTemporalRegion) # label("one-dimensional-temporal-region-is-a-universal") .
+
+universal(zeroDimensionalSpatialRegion) # label("zero-dimensional-spatial-region-is-a-universal") .
+
+universal(genericallyDependentContinuant) # label("generically-dependent-continuant-is-a-universal") .
+
+universal(threeDimensionalSpatialRegion) # label("three-dimensional-spatial-region-is-a-universal") .
+
+universal(zeroDimensionalTemporalRegion) # label("zero-dimensional-temporal-region-is-a-universal") .
+
+universal(specificallyDependentContinuant) # label("specifically-dependent-continuant-is-a-universal") .
+
+% this gives parsing error...
+%-(exists X  (((universal(X)) & (particular(X))))) # label("universals-particulars-disjoint") .
+(-(exists X  (((universal(X)) & (particular(X)))))) # label("universals-particulars-disjoint") .
+
+
+all T all X  ((instanceOf(X,history,T)) -> (instanceOf(X,process,T))) # label("history-isa-process") .
+
+all T all X  ((instanceOf(X,process,T)) -> (instanceOf(X,occurrent,T))) # label("process-isa-occurrent") .
+
+all T all X  ((instanceOf(X,function,T)) -> (instanceOf(X,disposition,T))) # label("function-isa-disposition") .
+
+all T all X  ((instanceOf(X,object,T)) -> (instanceOf(X,materialEntity,T))) # label("object-isa-material-entity") .
+
+all T all X  ((instanceOf(X,role,T)) -> (instanceOf(X,realizableEntity,T))) # label("role-isa-realizable-entity") .
+
+all T all X  ((instanceOf(X,site,T)) -> (instanceOf(X,immaterialEntity,T))) # label("site-isa-immaterial-entity") .
+
+all TI all T  ((instanceOf(TI,temporalRegion,T)) -> (temporalPartOf(T,TI))) # label("time-once") .
+
+all T all X  ((instanceOf(X,temporalRegion,T)) -> (instanceOf(X,occurrent,T))) # label("temporal-region-isa-occurrent") .
+
+((-(exists X exists T  (((instanceOf(X,disposition,T)) & (instanceOf(X,role,T))))))) # label("disposition+role-are-mutually-disjoint") .
+
+all T all X  ((instanceOf(X,processBoundary,T)) -> (instanceOf(X,occurrent,T))) # label("process-boundary-isa-occurrent") .
+
+all T all X  ((instanceOf(X,relationalQuality,T)) -> (instanceOf(X,quality,T))) # label("relational-quality-isa-quality") .
+
+all T all X  ((instanceOf(X,disposition,T)) -> (instanceOf(X,realizableEntity,T))) # label("disposition-isa-realizable-entity") .
+
+((-(exists X exists T  (((instanceOf(X,continuant,T)) & (instanceOf(X,occurrent,T))))))) # label("continuant+occurrent-are-mutually-disjoint") .
+
+all T all X  ((instanceOf(X,spatiotemporalRegion,T)) -> (instanceOf(X,occurrent,T))) # label("spatiotemporal-region-isa-occurrent") .
+
+all T all X  ((instanceOf(X,fiatObjectPart,T)) -> (instanceOf(X,materialEntity,T))) # label("fiat-object-part-isa-material-entity") .
+
+all T all X  ((instanceOf(X,objectAggregate,T)) -> (instanceOf(X,materialEntity,T))) # label("object-aggregate-isa-material-entity") .
+
+all T all X  ((instanceOf(X,spatialRegion,T)) -> (instanceOf(X,immaterialEntity,T))) # label("spatial-region-isa-immaterial-entity") .
+
+all T all X  ((instanceOf(X,independentContinuant,T)) -> (instanceOf(X,continuant,T))) # label("independent-continuant-isa-continuant") .
+
+all T all X  ((instanceOf(X,fiatLine,T)) -> (instanceOf(X,continuantFiatBoundary,T))) # label("fiat-line-isa-continuant-fiat-boundary") .
+
+((-(exists X exists T  (((instanceOf(X,quality,T)) & (instanceOf(X,realizableEntity,T))))))) # label("quality+realizable-entity-are-mutually-disjoint") .
+
+all T all X  ((instanceOf(X,fiatPoint,T)) -> (instanceOf(X,continuantFiatBoundary,T))) # label("fiat-point-isa-continuant-fiat-boundary") .
+
+all T all X  ((instanceOf(X,fiatSurface,T)) -> (instanceOf(X,continuantFiatBoundary,T))) # label("fiat-surface-isa-continuant-fiat-boundary") .
+
+all T all X  ((instanceOf(X,materialEntity,T)) -> (instanceOf(X,independentContinuant,T))) # label("material-entity-isa-independent-continuant") .
+
+all T all X  ((instanceOf(X,immaterialEntity,T)) -> (instanceOf(X,independentContinuant,T))) # label("immaterial-entity-isa-independent-continuant") .
+
+all T all X  ((instanceOf(X,quality,T)) -> (instanceOf(X,specificallyDependentContinuant,T))) # label("quality-isa-specifically-dependent-continuant") .
+
+all T all X  ((instanceOf(X,continuantFiatBoundary,T)) -> (instanceOf(X,immaterialEntity,T))) # label("continuant-fiat-boundary-isa-immaterial-entity") .
+
+((-(exists X exists T  (((instanceOf(X,materialEntity,T)) & (instanceOf(X,immaterialEntity,T))))))) # label("material-entity+immaterial-entity-are-mutually-disjoint") .
+
+all T all X  ((instanceOf(X,genericallyDependentContinuant,T)) -> (instanceOf(X,continuant,T))) # label("generically-dependent-continuant-isa-continuant") .
+
+all T all X  ((instanceOf(X,specificallyDependentContinuant,T)) -> (instanceOf(X,continuant,T))) # label("specifically-dependent-continuant-isa-continuant") .
+
+all T all X  ((instanceOf(X,oneDimensionalSpatialRegion,T)) -> (instanceOf(X,spatialRegion,T))) # label("one-dimensional-spatial-region-isa-spatial-region") .
+
+all T all X  ((instanceOf(X,twoDimensionalSpatialRegion,T)) -> (instanceOf(X,spatialRegion,T))) # label("two-dimensional-spatial-region-isa-spatial-region") .
+
+all T all X  ((instanceOf(X,zeroDimensionalSpatialRegion,T)) -> (instanceOf(X,spatialRegion,T))) # label("zero-dimensional-spatial-region-isa-spatial-region") .
+
+all T all X  ((instanceOf(X,oneDimensionalTemporalRegion,T)) -> (instanceOf(X,temporalRegion,T))) # label("one-dimensional-temporal-region-isa-temporal-region") .
+
+all T all X  ((instanceOf(X,threeDimensionalSpatialRegion,T)) -> (instanceOf(X,spatialRegion,T))) # label("three-dimensional-spatial-region-isa-spatial-region") .
+
+all T all X  ((instanceOf(X,zeroDimensionalTemporalRegion,T)) -> (instanceOf(X,temporalRegion,T))) # label("zero-dimensional-temporal-region-isa-temporal-region") .
+
+all T all X  ((instanceOf(X,temporalInstant,T)) -> (instanceOf(X,zeroDimensionalTemporalRegion,T))) # label("temporal-instant-isa-zero-dimensional-temporal-region") .
+
+all T all X  ((instanceOf(X,temporalInterval,T)) -> (instanceOf(X,oneDimensionalTemporalRegion,T))) # label("temporal-interval-isa-one-dimensional-temporal-region") .
+
+all X  ((exists T  (((instanceOf(X,continuant,T)) | (instanceOf(X,occurrent,T))))) -> (entity(X))) # label("entity-predicate") .
+
+all T all X  ((instanceOf(X,realizableEntity,T)) -> (instanceOf(X,specificallyDependentContinuant,T))) # label("realizable-entity-isa-specifically-dependent-continuant") .
+
+all X  ((exists T  (instanceOf(X,role,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,role,T))))) # label("role-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,site,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,site,T))))) # label("site-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,quality,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,quality,T))))) # label("quality-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,function,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,function,T))))) # label("function-is-rigid") .
+
+((-(exists X exists T  (((instanceOf(X,oneDimensionalTemporalRegion,T)) & (instanceOf(X,zeroDimensionalTemporalRegion,T))))))) # label("one-dimensional-temporal-region+zero-dimensional-temporal-region-are-mutually-disjoint") .
+
+all X  ((exists T  (instanceOf(X,fiatLine,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,fiatLine,T))))) # label("fiat-line-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,continuant,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,continuant,T))))) # label("continuant-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,fiatPoint,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,fiatPoint,T))))) # label("fiat-point-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,disposition,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,disposition,T))))) # label("disposition-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,fiatSurface,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,fiatSurface,T))))) # label("fiat-surface-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,spatialRegion,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,spatialRegion,T))))) # label("spatial-region-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,materialEntity,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,materialEntity,T))))) # label("material-entity-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,immaterialEntity,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,immaterialEntity,T))))) # label("immaterial-entity-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,realizableEntity,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,realizableEntity,T))))) # label("realizable-entity-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,relationalQuality,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,relationalQuality,T))))) # label("relational-quality-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,independentContinuant,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,independentContinuant,T))))) # label("independent-continuant-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,continuantFiatBoundary,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,continuantFiatBoundary,T))))) # label("continuant-fiat-boundary-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,oneDimensionalSpatialRegion,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,oneDimensionalSpatialRegion,T))))) # label("one-dimensional-spatial-region-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,twoDimensionalSpatialRegion,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,twoDimensionalSpatialRegion,T))))) # label("two-dimensional-spatial-region-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,zeroDimensionalSpatialRegion,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,zeroDimensionalSpatialRegion,T))))) # label("zero-dimensional-spatial-region-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,genericallyDependentContinuant,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,genericallyDependentContinuant,T))))) # label("generically-dependent-continuant-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,threeDimensionalSpatialRegion,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,threeDimensionalSpatialRegion,T))))) # label("three-dimensional-spatial-region-is-rigid") .
+
+all X  ((exists T  (instanceOf(X,specificallyDependentContinuant,T))) -> (all T  ((eXistsAt(X,T)) -> (instanceOf(X,specificallyDependentContinuant,T))))) # label("specifically-dependent-continuant-is-rigid") .
+
+all O  ((exists T  (instanceOf(O,occurrent,T))) -> (all U  ((exists T  (instanceOf(O,U,T))) -> (all T  ((instanceOf(O,occurrent,T)) <-> (instanceOf(O,U,T))))))) # label("all-occurrent-types-are-rigid") .
+
+((-(exists X exists T  (((instanceOf(X,fiatSurface,T)) & (instanceOf(X,fiatLine,T)))))) & (-(exists X exists T  (((instanceOf(X,fiatSurface,T)) & (instanceOf(X,fiatPoint,T)))))) & (-(exists X exists T  (((instanceOf(X,fiatLine,T)) & (instanceOf(X,fiatPoint,T))))))) # label("fiat-surface+fiat-line+fiat-point-are-mutually-disjoint") .
+
+((-(exists X exists T  (((instanceOf(X,site,T)) & (instanceOf(X,spatialRegion,T)))))) & (-(exists X exists T  (((instanceOf(X,site,T)) & (instanceOf(X,continuantFiatBoundary,T)))))) & (-(exists X exists T  (((instanceOf(X,spatialRegion,T)) & (instanceOf(X,continuantFiatBoundary,T))))))) # label("site+spatial-region+continuant-fiat-boundary-are-mutually-disjoint") .
+
+((-(exists X exists T  (((instanceOf(X,specificallyDependentContinuant,T)) & (instanceOf(X,independentContinuant,T)))))) & (-(exists X exists T  (((instanceOf(X,specificallyDependentContinuant,T)) & (instanceOf(X,genericallyDependentContinuant,T)))))) & (-(exists X exists T  (((instanceOf(X,independentContinuant,T)) & (instanceOf(X,genericallyDependentContinuant,T))))))) # label("specifically-dependent-continuant+independent-continuant+generically-dependent-continuant-are-mutually-disjoint") .
+
+((-(exists X exists T  (((instanceOf(X,process,T)) & (instanceOf(X,spatiotemporalRegion,T)))))) & (-(exists X exists T  (((instanceOf(X,process,T)) & (instanceOf(X,processBoundary,T)))))) & (-(exists X exists T  (((instanceOf(X,process,T)) & (instanceOf(X,temporalRegion,T)))))) & (-(exists X exists T  (((instanceOf(X,spatiotemporalRegion,T)) & (instanceOf(X,processBoundary,T)))))) & (-(exists X exists T  (((instanceOf(X,spatiotemporalRegion,T)) & (instanceOf(X,temporalRegion,T)))))) & (-(exists X exists T  (((instanceOf(X,processBoundary,T)) & (instanceOf(X,temporalRegion,T))))))) # label("process+spatiotemporal-region+process-boundary+temporal-region-are-mutually-disjoint") .
+
+% questo dà '>>>maximum recursion depth exceeded in comparison<<<', ma è l'unico che dà problemi. Infatti è troppo grande per essere analizzato dal parser, quindi non ci si puà fare niente dal punto di vista della logica, si potrebbe solo cambiare parser. Comunque è trivialmente vero per la semantica dell'uguaglianza (unique name assumption).
+%((-((continuant) = (materialEntity))) & (-((continuant) = (object))) & (-((continuant) = (fiatObjectPart))) & (-((continuant) = (objectAggregate))) & (-((continuant) = (site))) & (-((continuant) = (immaterialEntity))) & (-((continuant) = (continuantFiatBoundary))) & (-((continuant) = (fiatSurface))) & (-((continuant) = (fiatLine))) & (-((continuant) = (fiatPoint))) & (-((continuant) = (spatialRegion))) & (-((continuant) = (threeDimensionalSpatialRegion))) & (-((continuant) = (twoDimensionalSpatialRegion))) & (-((continuant) = (oneDimensionalSpatialRegion))) & (-((continuant) = (zeroDimensionalSpatialRegion))) & (-((continuant) = (independentContinuant))) & (-((continuant) = (genericallyDependentContinuant))) & (-((continuant) = (specificallyDependentContinuant))) & (-((continuant) = (quality))) & (-((continuant) = (relationalQuality))) & (-((continuant) = (function))) & (-((continuant) = (disposition))) & (-((continuant) = (realizableEntity))) & (-((continuant) = (role))) & (-((continuant) = (occurrent))) & (-((continuant) = (process))) & (-((continuant) = (processBoundary))) & (-((continuant) = (temporalRegion))) & (-((continuant) = (zeroDimensionalTemporalRegion))) & (-((continuant) = (temporalInstant))) & (-((continuant) = (oneDimensionalTemporalRegion))) & (-((continuant) = (temporalInterval))) & (-((continuant) = (history))) & (-((continuant) = (spatiotemporalRegion))) & (-((materialEntity) = (object))) & (-((materialEntity) = (fiatObjectPart))) & (-((materialEntity) = (objectAggregate))) & (-((materialEntity) = (site))) & (-((materialEntity) = (immaterialEntity))) & (-((materialEntity) = (continuantFiatBoundary))) & (-((materialEntity) = (fiatSurface))) & (-((materialEntity) = (fiatLine))) & (-((materialEntity) = (fiatPoint))) & (-((materialEntity) = (spatialRegion))) & (-((materialEntity) = (threeDimensionalSpatialRegion))) & (-((materialEntity) = (twoDimensionalSpatialRegion))) & (-((materialEntity) = (oneDimensionalSpatialRegion))) & (-((materialEntity) = (zeroDimensionalSpatialRegion))) & (-((materialEntity) = (independentContinuant))) & (-((materialEntity) = (genericallyDependentContinuant))) & (-((materialEntity) = (specificallyDependentContinuant))) & (-((materialEntity) = (quality))) & (-((materialEntity) = (relationalQuality))) & (-((materialEntity) = (function))) & (-((materialEntity) = (disposition))) & (-((materialEntity) = (realizableEntity))) & (-((materialEntity) = (role))) & (-((materialEntity) = (occurrent))) & (-((materialEntity) = (process))) & (-((materialEntity) = (processBoundary))) & (-((materialEntity) = (temporalRegion))) & (-((materialEntity) = (zeroDimensionalTemporalRegion))) & (-((materialEntity) = (temporalInstant))) & (-((materialEntity) = (oneDimensionalTemporalRegion))) & (-((materialEntity) = (temporalInterval))) & (-((materialEntity) = (history))) & (-((materialEntity) = (spatiotemporalRegion))) & (-((object) = (fiatObjectPart))) & (-((object) = (objectAggregate))) & (-((object) = (site))) & (-((object) = (immaterialEntity))) & (-((object) = (continuantFiatBoundary))) & (-((object) = (fiatSurface))) & (-((object) = (fiatLine))) & (-((object) = (fiatPoint))) & (-((object) = (spatialRegion))) & (-((object) = (threeDimensionalSpatialRegion))) & (-((object) = (twoDimensionalSpatialRegion))) & (-((object) = (oneDimensionalSpatialRegion))) & (-((object) = (zeroDimensionalSpatialRegion))) & (-((object) = (independentContinuant))) & (-((object) = (genericallyDependentContinuant))) & (-((object) = (specificallyDependentContinuant))) & (-((object) = (quality))) & (-((object) = (relationalQuality))) & (-((object) = (function))) & (-((object) = (disposition))) & (-((object) = (realizableEntity))) & (-((object) = (role))) & (-((object) = (occurrent))) & (-((object) = (process))) & (-((object) = (processBoundary))) & (-((object) = (temporalRegion))) & (-((object) = (zeroDimensionalTemporalRegion))) & (-((object) = (temporalInstant))) & (-((object) = (oneDimensionalTemporalRegion))) & (-((object) = (temporalInterval))) & (-((object) = (history))) & (-((object) = (spatiotemporalRegion))) & (-((fiatObjectPart) = (objectAggregate))) & (-((fiatObjectPart) = (site))) & (-((fiatObjectPart) = (immaterialEntity))) & (-((fiatObjectPart) = (continuantFiatBoundary))) & (-((fiatObjectPart) = (fiatSurface))) & (-((fiatObjectPart) = (fiatLine))) & (-((fiatObjectPart) = (fiatPoint))) & (-((fiatObjectPart) = (spatialRegion))) & (-((fiatObjectPart) = (threeDimensionalSpatialRegion))) & (-((fiatObjectPart) = (twoDimensionalSpatialRegion))) & (-((fiatObjectPart) = (oneDimensionalSpatialRegion))) & (-((fiatObjectPart) = (zeroDimensionalSpatialRegion))) & (-((fiatObjectPart) = (independentContinuant))) & (-((fiatObjectPart) = (genericallyDependentContinuant))) & (-((fiatObjectPart) = (specificallyDependentContinuant))) & (-((fiatObjectPart) = (quality))) & (-((fiatObjectPart) = (relationalQuality))) & (-((fiatObjectPart) = (function))) & (-((fiatObjectPart) = (disposition))) & (-((fiatObjectPart) = (realizableEntity))) & (-((fiatObjectPart) = (role))) & (-((fiatObjectPart) = (occurrent))) & (-((fiatObjectPart) = (process))) & (-((fiatObjectPart) = (processBoundary))) & (-((fiatObjectPart) = (temporalRegion))) & (-((fiatObjectPart) = (zeroDimensionalTemporalRegion))) & (-((fiatObjectPart) = (temporalInstant))) & (-((fiatObjectPart) = (oneDimensionalTemporalRegion))) & (-((fiatObjectPart) = (temporalInterval))) & (-((fiatObjectPart) = (history))) & (-((fiatObjectPart) = (spatiotemporalRegion))) & (-((objectAggregate) = (site))) & (-((objectAggregate) = (immaterialEntity))) & (-((objectAggregate) = (continuantFiatBoundary))) & (-((objectAggregate) = (fiatSurface))) & (-((objectAggregate) = (fiatLine))) & (-((objectAggregate) = (fiatPoint))) & (-((objectAggregate) = (spatialRegion))) & (-((objectAggregate) = (threeDimensionalSpatialRegion))) & (-((objectAggregate) = (twoDimensionalSpatialRegion))) & (-((objectAggregate) = (oneDimensionalSpatialRegion))) & (-((objectAggregate) = (zeroDimensionalSpatialRegion))) & (-((objectAggregate) = (independentContinuant))) & (-((objectAggregate) = (genericallyDependentContinuant))) & (-((objectAggregate) = (specificallyDependentContinuant))) & (-((objectAggregate) = (quality))) & (-((objectAggregate) = (relationalQuality))) & (-((objectAggregate) = (function))) & (-((objectAggregate) = (disposition))) & (-((objectAggregate) = (realizableEntity))) & (-((objectAggregate) = (role))) & (-((objectAggregate) = (occurrent))) & (-((objectAggregate) = (process))) & (-((objectAggregate) = (processBoundary))) & (-((objectAggregate) = (temporalRegion))) & (-((objectAggregate) = (zeroDimensionalTemporalRegion))) & (-((objectAggregate) = (temporalInstant))) & (-((objectAggregate) = (oneDimensionalTemporalRegion))) & (-((objectAggregate) = (temporalInterval))) & (-((objectAggregate) = (history))) & (-((objectAggregate) = (spatiotemporalRegion))) & (-((site) = (immaterialEntity))) & (-((site) = (continuantFiatBoundary))) & (-((site) = (fiatSurface))) & (-((site) = (fiatLine))) & (-((site) = (fiatPoint))) & (-((site) = (spatialRegion))) & (-((site) = (threeDimensionalSpatialRegion))) & (-((site) = (twoDimensionalSpatialRegion))) & (-((site) = (oneDimensionalSpatialRegion))) & (-((site) = (zeroDimensionalSpatialRegion))) & (-((site) = (independentContinuant))) & (-((site) = (genericallyDependentContinuant))) & (-((site) = (specificallyDependentContinuant))) & (-((site) = (quality))) & (-((site) = (relationalQuality))) & (-((site) = (function))) & (-((site) = (disposition))) & (-((site) = (realizableEntity))) & (-((site) = (role))) & (-((site) = (occurrent))) & (-((site) = (process))) & (-((site) = (processBoundary))) & (-((site) = (temporalRegion))) & (-((site) = (zeroDimensionalTemporalRegion))) & (-((site) = (temporalInstant))) & (-((site) = (oneDimensionalTemporalRegion))) & (-((site) = (temporalInterval))) & (-((site) = (history))) & (-((site) = (spatiotemporalRegion))) & (-((immaterialEntity) = (continuantFiatBoundary))) & (-((immaterialEntity) = (fiatSurface))) & (-((immaterialEntity) = (fiatLine))) & (-((immaterialEntity) = (fiatPoint))) & (-((immaterialEntity) = (spatialRegion))) & (-((immaterialEntity) = (threeDimensionalSpatialRegion))) & (-((immaterialEntity) = (twoDimensionalSpatialRegion))) & (-((immaterialEntity) = (oneDimensionalSpatialRegion))) & (-((immaterialEntity) = (zeroDimensionalSpatialRegion))) & (-((immaterialEntity) = (independentContinuant))) & (-((immaterialEntity) = (genericallyDependentContinuant))) & (-((immaterialEntity) = (specificallyDependentContinuant))) & (-((immaterialEntity) = (quality))) & (-((immaterialEntity) = (relationalQuality))) & (-((immaterialEntity) = (function))) & (-((immaterialEntity) = (disposition))) & (-((immaterialEntity) = (realizableEntity))) & (-((immaterialEntity) = (role))) & (-((immaterialEntity) = (occurrent))) & (-((immaterialEntity) = (process))) & (-((immaterialEntity) = (processBoundary))) & (-((immaterialEntity) = (temporalRegion))) & (-((immaterialEntity) = (zeroDimensionalTemporalRegion))) & (-((immaterialEntity) = (temporalInstant))) & (-((immaterialEntity) = (oneDimensionalTemporalRegion))) & (-((immaterialEntity) = (temporalInterval))) & (-((immaterialEntity) = (history))) & (-((immaterialEntity) = (spatiotemporalRegion))) & (-((continuantFiatBoundary) = (fiatSurface))) & (-((continuantFiatBoundary) = (fiatLine))) & (-((continuantFiatBoundary) = (fiatPoint))) & (-((continuantFiatBoundary) = (spatialRegion))) & (-((continuantFiatBoundary) = (threeDimensionalSpatialRegion))) & (-((continuantFiatBoundary) = (twoDimensionalSpatialRegion))) & (-((continuantFiatBoundary) = (oneDimensionalSpatialRegion))) & (-((continuantFiatBoundary) = (zeroDimensionalSpatialRegion))) & (-((continuantFiatBoundary) = (independentContinuant))) & (-((continuantFiatBoundary) = (genericallyDependentContinuant))) & (-((continuantFiatBoundary) = (specificallyDependentContinuant))) & (-((continuantFiatBoundary) = (quality))) & (-((continuantFiatBoundary) = (relationalQuality))) & (-((continuantFiatBoundary) = (function))) & (-((continuantFiatBoundary) = (disposition))) & (-((continuantFiatBoundary) = (realizableEntity))) & (-((continuantFiatBoundary) = (role))) & (-((continuantFiatBoundary) = (occurrent))) & (-((continuantFiatBoundary) = (process))) & (-((continuantFiatBoundary) = (processBoundary))) & (-((continuantFiatBoundary) = (temporalRegion))) & (-((continuantFiatBoundary) = (zeroDimensionalTemporalRegion))) & (-((continuantFiatBoundary) = (temporalInstant))) & (-((continuantFiatBoundary) = (oneDimensionalTemporalRegion))) & (-((continuantFiatBoundary) = (temporalInterval))) & (-((continuantFiatBoundary) = (history))) & (-((continuantFiatBoundary) = (spatiotemporalRegion))) & (-((fiatSurface) = (fiatLine))) & (-((fiatSurface) = (fiatPoint))) & (-((fiatSurface) = (spatialRegion))) & (-((fiatSurface) = (threeDimensionalSpatialRegion))) & (-((fiatSurface) = (twoDimensionalSpatialRegion))) & (-((fiatSurface) = (oneDimensionalSpatialRegion))) & (-((fiatSurface) = (zeroDimensionalSpatialRegion))) & (-((fiatSurface) = (independentContinuant))) & (-((fiatSurface) = (genericallyDependentContinuant))) & (-((fiatSurface) = (specificallyDependentContinuant))) & (-((fiatSurface) = (quality))) & (-((fiatSurface) = (relationalQuality))) & (-((fiatSurface) = (function))) & (-((fiatSurface) = (disposition))) & (-((fiatSurface) = (realizableEntity))) & (-((fiatSurface) = (role))) & (-((fiatSurface) = (occurrent))) & (-((fiatSurface) = (process))) & (-((fiatSurface) = (processBoundary))) & (-((fiatSurface) = (temporalRegion))) & (-((fiatSurface) = (zeroDimensionalTemporalRegion))) & (-((fiatSurface) = (temporalInstant))) & (-((fiatSurface) = (oneDimensionalTemporalRegion))) & (-((fiatSurface) = (temporalInterval))) & (-((fiatSurface) = (history))) & (-((fiatSurface) = (spatiotemporalRegion))) & (-((fiatLine) = (fiatPoint))) & (-((fiatLine) = (spatialRegion))) & (-((fiatLine) = (threeDimensionalSpatialRegion))) & (-((fiatLine) = (twoDimensionalSpatialRegion))) & (-((fiatLine) = (oneDimensionalSpatialRegion))) & (-((fiatLine) = (zeroDimensionalSpatialRegion))) & (-((fiatLine) = (independentContinuant))) & (-((fiatLine) = (genericallyDependentContinuant))) & (-((fiatLine) = (specificallyDependentContinuant))) & (-((fiatLine) = (quality))) & (-((fiatLine) = (relationalQuality))) & (-((fiatLine) = (function))) & (-((fiatLine) = (disposition))) & (-((fiatLine) = (realizableEntity))) & (-((fiatLine) = (role))) & (-((fiatLine) = (occurrent))) & (-((fiatLine) = (process))) & (-((fiatLine) = (processBoundary))) & (-((fiatLine) = (temporalRegion))) & (-((fiatLine) = (zeroDimensionalTemporalRegion))) & (-((fiatLine) = (temporalInstant))) & (-((fiatLine) = (oneDimensionalTemporalRegion))) & (-((fiatLine) = (temporalInterval))) & (-((fiatLine) = (history))) & (-((fiatLine) = (spatiotemporalRegion))) & (-((fiatPoint) = (spatialRegion))) & (-((fiatPoint) = (threeDimensionalSpatialRegion))) & (-((fiatPoint) = (twoDimensionalSpatialRegion))) & (-((fiatPoint) = (oneDimensionalSpatialRegion))) & (-((fiatPoint) = (zeroDimensionalSpatialRegion))) & (-((fiatPoint) = (independentContinuant))) & (-((fiatPoint) = (genericallyDependentContinuant))) & (-((fiatPoint) = (specificallyDependentContinuant))) & (-((fiatPoint) = (quality))) & (-((fiatPoint) = (relationalQuality))) & (-((fiatPoint) = (function))) & (-((fiatPoint) = (disposition))) & (-((fiatPoint) = (realizableEntity))) & (-((fiatPoint) = (role))) & (-((fiatPoint) = (occurrent))) & (-((fiatPoint) = (process))) & (-((fiatPoint) = (processBoundary))) & (-((fiatPoint) = (temporalRegion))) & (-((fiatPoint) = (zeroDimensionalTemporalRegion))) & (-((fiatPoint) = (temporalInstant))) & (-((fiatPoint) = (oneDimensionalTemporalRegion))) & (-((fiatPoint) = (temporalInterval))) & (-((fiatPoint) = (history))) & (-((fiatPoint) = (spatiotemporalRegion))) & (-((spatialRegion) = (threeDimensionalSpatialRegion))) & (-((spatialRegion) = (twoDimensionalSpatialRegion))) & (-((spatialRegion) = (oneDimensionalSpatialRegion))) & (-((spatialRegion) = (zeroDimensionalSpatialRegion))) & (-((spatialRegion) = (independentContinuant))) & (-((spatialRegion) = (genericallyDependentContinuant))) & (-((spatialRegion) = (specificallyDependentContinuant))) & (-((spatialRegion) = (quality))) & (-((spatialRegion) = (relationalQuality))) & (-((spatialRegion) = (function))) & (-((spatialRegion) = (disposition))) & (-((spatialRegion) = (realizableEntity))) & (-((spatialRegion) = (role))) & (-((spatialRegion) = (occurrent))) & (-((spatialRegion) = (process))) & (-((spatialRegion) = (processBoundary))) & (-((spatialRegion) = (temporalRegion))) & (-((spatialRegion) = (zeroDimensionalTemporalRegion))) & (-((spatialRegion) = (temporalInstant))) & (-((spatialRegion) = (oneDimensionalTemporalRegion))) & (-((spatialRegion) = (temporalInterval))) & (-((spatialRegion) = (history))) & (-((spatialRegion) = (spatiotemporalRegion))) & (-((threeDimensionalSpatialRegion) = (twoDimensionalSpatialRegion))) & (-((threeDimensionalSpatialRegion) = (oneDimensionalSpatialRegion))) & (-((threeDimensionalSpatialRegion) = (zeroDimensionalSpatialRegion))) & (-((threeDimensionalSpatialRegion) = (independentContinuant))) & (-((threeDimensionalSpatialRegion) = (genericallyDependentContinuant))) & (-((threeDimensionalSpatialRegion) = (specificallyDependentContinuant))) & (-((threeDimensionalSpatialRegion) = (quality))) & (-((threeDimensionalSpatialRegion) = (relationalQuality))) & (-((threeDimensionalSpatialRegion) = (function))) & (-((threeDimensionalSpatialRegion) = (disposition))) & (-((threeDimensionalSpatialRegion) = (realizableEntity))) & (-((threeDimensionalSpatialRegion) = (role))) & (-((threeDimensionalSpatialRegion) = (occurrent))) & (-((threeDimensionalSpatialRegion) = (process))) & (-((threeDimensionalSpatialRegion) = (processBoundary))) & (-((threeDimensionalSpatialRegion) = (temporalRegion))) & (-((threeDimensionalSpatialRegion) = (zeroDimensionalTemporalRegion))) & (-((threeDimensionalSpatialRegion) = (temporalInstant))) & (-((threeDimensionalSpatialRegion) = (oneDimensionalTemporalRegion))) & (-((threeDimensionalSpatialRegion) = (temporalInterval))) & (-((threeDimensionalSpatialRegion) = (history))) & (-((threeDimensionalSpatialRegion) = (spatiotemporalRegion))) & (-((twoDimensionalSpatialRegion) = (oneDimensionalSpatialRegion))) & (-((twoDimensionalSpatialRegion) = (zeroDimensionalSpatialRegion))) & (-((twoDimensionalSpatialRegion) = (independentContinuant))) & (-((twoDimensionalSpatialRegion) = (genericallyDependentContinuant))) & (-((twoDimensionalSpatialRegion) = (specificallyDependentContinuant))) & (-((twoDimensionalSpatialRegion) = (quality))) & (-((twoDimensionalSpatialRegion) = (relationalQuality))) & (-((twoDimensionalSpatialRegion) = (function))) & (-((twoDimensionalSpatialRegion) = (disposition))) & (-((twoDimensionalSpatialRegion) = (realizableEntity))) & (-((twoDimensionalSpatialRegion) = (role))) & (-((twoDimensionalSpatialRegion) = (occurrent))) & (-((twoDimensionalSpatialRegion) = (process))) & (-((twoDimensionalSpatialRegion) = (processBoundary))) & (-((twoDimensionalSpatialRegion) = (temporalRegion))) & (-((twoDimensionalSpatialRegion) = (zeroDimensionalTemporalRegion))) & (-((twoDimensionalSpatialRegion) = (temporalInstant))) & (-((twoDimensionalSpatialRegion) = (oneDimensionalTemporalRegion))) & (-((twoDimensionalSpatialRegion) = (temporalInterval))) & (-((twoDimensionalSpatialRegion) = (history))) & (-((twoDimensionalSpatialRegion) = (spatiotemporalRegion))) & (-((oneDimensionalSpatialRegion) = (zeroDimensionalSpatialRegion))) & (-((oneDimensionalSpatialRegion) = (independentContinuant))) & (-((oneDimensionalSpatialRegion) = (genericallyDependentContinuant))) & (-((oneDimensionalSpatialRegion) = (specificallyDependentContinuant))) & (-((oneDimensionalSpatialRegion) = (quality))) & (-((oneDimensionalSpatialRegion) = (relationalQuality))) & (-((oneDimensionalSpatialRegion) = (function))) & (-((oneDimensionalSpatialRegion) = (disposition))) & (-((oneDimensionalSpatialRegion) = (realizableEntity))) & (-((oneDimensionalSpatialRegion) = (role))) & (-((oneDimensionalSpatialRegion) = (occurrent))) & (-((oneDimensionalSpatialRegion) = (process))) & (-((oneDimensionalSpatialRegion) = (processBoundary))) & (-((oneDimensionalSpatialRegion) = (temporalRegion))) & (-((oneDimensionalSpatialRegion) = (zeroDimensionalTemporalRegion))) & (-((oneDimensionalSpatialRegion) = (temporalInstant))) & (-((oneDimensionalSpatialRegion) = (oneDimensionalTemporalRegion))) & (-((oneDimensionalSpatialRegion) = (temporalInterval))) & (-((oneDimensionalSpatialRegion) = (history))) & (-((oneDimensionalSpatialRegion) = (spatiotemporalRegion))) & (-((zeroDimensionalSpatialRegion) = (independentContinuant))) & (-((zeroDimensionalSpatialRegion) = (genericallyDependentContinuant))) & (-((zeroDimensionalSpatialRegion) = (specificallyDependentContinuant))) & (-((zeroDimensionalSpatialRegion) = (quality))) & (-((zeroDimensionalSpatialRegion) = (relationalQuality))) & (-((zeroDimensionalSpatialRegion) = (function))) & (-((zeroDimensionalSpatialRegion) = (disposition))) & (-((zeroDimensionalSpatialRegion) = (realizableEntity))) & (-((zeroDimensionalSpatialRegion) = (role))) & (-((zeroDimensionalSpatialRegion) = (occurrent))) & (-((zeroDimensionalSpatialRegion) = (process))) & (-((zeroDimensionalSpatialRegion) = (processBoundary))) & (-((zeroDimensionalSpatialRegion) = (temporalRegion))) & (-((zeroDimensionalSpatialRegion) = (zeroDimensionalTemporalRegion))) & (-((zeroDimensionalSpatialRegion) = (temporalInstant))) & (-((zeroDimensionalSpatialRegion) = (oneDimensionalTemporalRegion))) & (-((zeroDimensionalSpatialRegion) = (temporalInterval))) & (-((zeroDimensionalSpatialRegion) = (history))) & (-((zeroDimensionalSpatialRegion) = (spatiotemporalRegion))) & (-((independentContinuant) = (genericallyDependentContinuant))) & (-((independentContinuant) = (specificallyDependentContinuant))) & (-((independentContinuant) = (quality))) & (-((independentContinuant) = (relationalQuality))) & (-((independentContinuant) = (function))) & (-((independentContinuant) = (disposition))) & (-((independentContinuant) = (realizableEntity))) & (-((independentContinuant) = (role))) & (-((independentContinuant) = (occurrent))) & (-((independentContinuant) = (process))) & (-((independentContinuant) = (processBoundary))) & (-((independentContinuant) = (temporalRegion))) & (-((independentContinuant) = (zeroDimensionalTemporalRegion))) & (-((independentContinuant) = (temporalInstant))) & (-((independentContinuant) = (oneDimensionalTemporalRegion))) & (-((independentContinuant) = (temporalInterval))) & (-((independentContinuant) = (history))) & (-((independentContinuant) = (spatiotemporalRegion))) & (-((genericallyDependentContinuant) = (specificallyDependentContinuant))) & (-((genericallyDependentContinuant) = (quality))) & (-((genericallyDependentContinuant) = (relationalQuality))) & (-((genericallyDependentContinuant) = (function))) & (-((genericallyDependentContinuant) = (disposition))) & (-((genericallyDependentContinuant) = (realizableEntity))) & (-((genericallyDependentContinuant) = (role))) & (-((genericallyDependentContinuant) = (occurrent))) & (-((genericallyDependentContinuant) = (process))) & (-((genericallyDependentContinuant) = (processBoundary))) & (-((genericallyDependentContinuant) = (temporalRegion))) & (-((genericallyDependentContinuant) = (zeroDimensionalTemporalRegion))) & (-((genericallyDependentContinuant) = (temporalInstant))) & (-((genericallyDependentContinuant) = (oneDimensionalTemporalRegion))) & (-((genericallyDependentContinuant) = (temporalInterval))) & (-((genericallyDependentContinuant) = (history))) & (-((genericallyDependentContinuant) = (spatiotemporalRegion))) & (-((specificallyDependentContinuant) = (quality))) & (-((specificallyDependentContinuant) = (relationalQuality))) & (-((specificallyDependentContinuant) = (function))) & (-((specificallyDependentContinuant) = (disposition))) & (-((specificallyDependentContinuant) = (realizableEntity))) & (-((specificallyDependentContinuant) = (role))) & (-((specificallyDependentContinuant) = (occurrent))) & (-((specificallyDependentContinuant) = (process))) & (-((specificallyDependentContinuant) = (processBoundary))) & (-((specificallyDependentContinuant) = (temporalRegion))) & (-((specificallyDependentContinuant) = (zeroDimensionalTemporalRegion))) & (-((specificallyDependentContinuant) = (temporalInstant))) & (-((specificallyDependentContinuant) = (oneDimensionalTemporalRegion))) & (-((specificallyDependentContinuant) = (temporalInterval))) & (-((specificallyDependentContinuant) = (history))) & (-((specificallyDependentContinuant) = (spatiotemporalRegion))) & (-((quality) = (relationalQuality))) & (-((quality) = (function))) & (-((quality) = (disposition))) & (-((quality) = (realizableEntity))) & (-((quality) = (role))) & (-((quality) = (occurrent))) & (-((quality) = (process))) & (-((quality) = (processBoundary))) & (-((quality) = (temporalRegion))) & (-((quality) = (zeroDimensionalTemporalRegion))) & (-((quality) = (temporalInstant))) & (-((quality) = (oneDimensionalTemporalRegion))) & (-((quality) = (temporalInterval))) & (-((quality) = (history))) & (-((quality) = (spatiotemporalRegion))) & (-((relationalQuality) = (function))) & (-((relationalQuality) = (disposition))) & (-((relationalQuality) = (realizableEntity))) & (-((relationalQuality) = (role))) & (-((relationalQuality) = (occurrent))) & (-((relationalQuality) = (process))) & (-((relationalQuality) = (processBoundary))) & (-((relationalQuality) = (temporalRegion))) & (-((relationalQuality) = (zeroDimensionalTemporalRegion))) & (-((relationalQuality) = (temporalInstant))) & (-((relationalQuality) = (oneDimensionalTemporalRegion))) & (-((relationalQuality) = (temporalInterval))) & (-((relationalQuality) = (history))) & (-((relationalQuality) = (spatiotemporalRegion))) & (-((function) = (disposition))) & (-((function) = (realizableEntity))) & (-((function) = (role))) & (-((function) = (occurrent))) & (-((function) = (process))) & (-((function) = (processBoundary))) & (-((function) = (temporalRegion))) & (-((function) = (zeroDimensionalTemporalRegion))) & (-((function) = (temporalInstant))) & (-((function) = (oneDimensionalTemporalRegion))) & (-((function) = (temporalInterval))) & (-((function) = (history))) & (-((function) = (spatiotemporalRegion))) & (-((disposition) = (realizableEntity))) & (-((disposition) = (role))) & (-((disposition) = (occurrent))) & (-((disposition) = (process))) & (-((disposition) = (processBoundary))) & (-((disposition) = (temporalRegion))) & (-((disposition) = (zeroDimensionalTemporalRegion))) & (-((disposition) = (temporalInstant))) & (-((disposition) = (oneDimensionalTemporalRegion))) & (-((disposition) = (temporalInterval))) & (-((disposition) = (history))) & (-((disposition) = (spatiotemporalRegion))) & (-((realizableEntity) = (role))) & (-((realizableEntity) = (occurrent))) & (-((realizableEntity) = (process))) & (-((realizableEntity) = (processBoundary))) & (-((realizableEntity) = (temporalRegion))) & (-((realizableEntity) = (zeroDimensionalTemporalRegion))) & (-((realizableEntity) = (temporalInstant))) & (-((realizableEntity) = (oneDimensionalTemporalRegion))) & (-((realizableEntity) = (temporalInterval))) & (-((realizableEntity) = (history))) & (-((realizableEntity) = (spatiotemporalRegion))) & (-((role) = (occurrent))) & (-((role) = (process))) & (-((role) = (processBoundary))) & (-((role) = (temporalRegion))) & (-((role) = (zeroDimensionalTemporalRegion))) & (-((role) = (temporalInstant))) & (-((role) = (oneDimensionalTemporalRegion))) & (-((role) = (temporalInterval))) & (-((role) = (history))) & (-((role) = (spatiotemporalRegion))) & (-((occurrent) = (process))) & (-((occurrent) = (processBoundary))) & (-((occurrent) = (temporalRegion))) & (-((occurrent) = (zeroDimensionalTemporalRegion))) & (-((occurrent) = (temporalInstant))) & (-((occurrent) = (oneDimensionalTemporalRegion))) & (-((occurrent) = (temporalInterval))) & (-((occurrent) = (history))) & (-((occurrent) = (spatiotemporalRegion))) & (-((process) = (processBoundary))) & (-((process) = (temporalRegion))) & (-((process) = (zeroDimensionalTemporalRegion))) & (-((process) = (temporalInstant))) & (-((process) = (oneDimensionalTemporalRegion))) & (-((process) = (temporalInterval))) & (-((process) = (history))) & (-((process) = (spatiotemporalRegion))) & (-((processBoundary) = (temporalRegion))) & (-((processBoundary) = (zeroDimensionalTemporalRegion))) & (-((processBoundary) = (temporalInstant))) & (-((processBoundary) = (oneDimensionalTemporalRegion))) & (-((processBoundary) = (temporalInterval))) & (-((processBoundary) = (history))) & (-((processBoundary) = (spatiotemporalRegion))) & (-((temporalRegion) = (zeroDimensionalTemporalRegion))) & (-((temporalRegion) = (temporalInstant))) & (-((temporalRegion) = (oneDimensionalTemporalRegion))) & (-((temporalRegion) = (temporalInterval))) & (-((temporalRegion) = (history))) & (-((temporalRegion) = (spatiotemporalRegion))) & (-((zeroDimensionalTemporalRegion) = (temporalInstant))) & (-((zeroDimensionalTemporalRegion) = (oneDimensionalTemporalRegion))) & (-((zeroDimensionalTemporalRegion) = (temporalInterval))) & (-((zeroDimensionalTemporalRegion) = (history))) & (-((zeroDimensionalTemporalRegion) = (spatiotemporalRegion))) & (-((temporalInstant) = (oneDimensionalTemporalRegion))) & (-((temporalInstant) = (temporalInterval))) & (-((temporalInstant) = (history))) & (-((temporalInstant) = (spatiotemporalRegion))) & (-((oneDimensionalTemporalRegion) = (temporalInterval))) & (-((oneDimensionalTemporalRegion) = (history))) & (-((oneDimensionalTemporalRegion) = (spatiotemporalRegion))) & (-((temporalInterval) = (history))) & (-((temporalInterval) = (spatiotemporalRegion))) & (-((history) = (spatiotemporalRegion)))) # label("universals-all-different") .
+
+((-(exists X exists T  (((instanceOf(X,zeroDimensionalSpatialRegion,T)) & (instanceOf(X,oneDimensionalSpatialRegion,T)))))) & (-(exists X exists T  (((instanceOf(X,zeroDimensionalSpatialRegion,T)) & (instanceOf(X,twoDimensionalSpatialRegion,T)))))) & (-(exists X exists T  (((instanceOf(X,zeroDimensionalSpatialRegion,T)) & (instanceOf(X,threeDimensionalSpatialRegion,T)))))) & (-(exists X exists T  (((instanceOf(X,oneDimensionalSpatialRegion,T)) & (instanceOf(X,twoDimensionalSpatialRegion,T)))))) & (-(exists X exists T  (((instanceOf(X,oneDimensionalSpatialRegion,T)) & (instanceOf(X,threeDimensionalSpatialRegion,T)))))) & (-(exists X exists T  (((instanceOf(X,twoDimensionalSpatialRegion,T)) & (instanceOf(X,threeDimensionalSpatialRegion,T))))))) # label("zero-dimensional-spatial-region+one-dimensional-spatial-region+two-dimensional-spatial-region+three-dimensional-spatial-region-are-mutually-disjoint") .
+
+
+

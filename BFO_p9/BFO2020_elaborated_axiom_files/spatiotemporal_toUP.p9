@@ -1,0 +1,58 @@
+
+
+set(prolog_style_variables)
+
+all A all T  ((occupiesTemporalRegion(A,T)) -> (eXistsAt(A,T))) # label("occupies-temporal-region-existence") .
+
+all P all Q all R  ((((eXistsAt(P,Q)) & (temporalPartOf(P,R)))) -> (eXistsAt(R,Q))) # label("exists-at-is-a-lower-bound-on-first-argument-temporal") .
+
+all P all Q all R  ((((occupiesTemporalRegion(P,Q)) & (occupiesTemporalRegion(P,R)))) -> ((Q) = (R))) # label("occupies-temporal-region-functional-on-second-argument") .
+
+all P all Q all R  ((((temporallyProjectsOnto(P,Q)) & (temporallyProjectsOnto(P,R)))) -> ((Q) = (R))) # label("temporally-projects-onto-functional-on-second-argument") .
+
+all P all Q all R all S  ((((spatiallyProjectsOnto(P,Q,R)) & (spatiallyProjectsOnto(P,S,R)))) -> ((Q) = (S))) # label("spatially-projects-onto-functional-on-second-argument") .
+
+all P all Q all R  ((((occupiesSpatiotemporalRegion(P,Q)) & (occupiesSpatiotemporalRegion(P,R)))) -> ((Q) = (R))) # label("occupies-spatiotemporal-region-functional-on-second-argument") .
+
+all P all C1 all C2  ((((occursIn(P,C1)) & (all T  ((eXistsAt(P,T)) <-> (locatedIn(C1,C2,T)))))) -> (occursIn(P,C2))) # label("occurs-in-is-a-lower-bound-on-second-argument-continuant") .
+
+all P all Q all T  ((((occupiesSpatialRegion(P,Q,T)) & (instanceOf(P,site,T)))) -> (instanceOf(Q,threeDimensionalSpatialRegion,T))) # label("occupies-spatial-region.site->three-dimensional-spatial-region") .
+
+all P all T  ((occupiesTemporalRegion(P,T)) <-> (exists ST  (((occupiesSpatiotemporalRegion(P,ST)) & (temporallyProjectsOnto(ST,T)))))) # label("process-occupies-temporal-region-same-as-st-region-occupies") .
+
+all A all B  ((temporallyProjectsOnto(A,B)) -> (((exists T  (instanceOf(A,spatiotemporalRegion,T))) & (instanceOf(B,temporalRegion,B))))) # label("temporally-projects-onto-domain-range") .
+
+all P all Q all T  ((((occupiesSpatialRegion(P,Q,T)) & (instanceOf(P,materialEntity,T)))) -> (instanceOf(Q,threeDimensionalSpatialRegion,T))) # label("occupies-spatial-region.material-entity->three-dimensional-spatial-region") .
+
+all PB all TR  ((((exists T  (instanceOf(PB,processBoundary,T))) & (occupiesTemporalRegion(PB,TR)))) -> (instanceOf(TR,temporalInstant,TR))) # label("process-boundary-occupies-temporal-instant") .
+
+all P  ((exists T  (((instanceOf(P,process,T)) | (instanceOf(P,processBoundary,T))))) -> (exists S  (occupiesSpatiotemporalRegion(P,S)))) # label("processes-occupy-spatiotemporal-regions") .
+
+all ST  ((exists T  (instanceOf(ST,spatiotemporalRegion,T))) -> (exists T  (((instanceOf(T,temporalRegion,T)) & (temporallyProjectsOnto(ST,T)))))) # label("every-spatiotemporal-region-projects-onto-temporal-region") .
+
+all TR  ((instanceOf(TR,temporalRegion,TR)) -> (exists ST  (((exists T  (instanceOf(ST,spatiotemporalRegion,T))) & (temporallyProjectsOnto(ST,TR)))))) # label("every-temporal-region-is-projection-from-spatiotemporal-region") .
+
+all A all B all T  ((spatiallyProjectsOnto(A,B,T)) -> (((instanceOf(A,spatiotemporalRegion,T)) & (instanceOf(B,spatialRegion,T)) & (instanceOf(T,temporalRegion,T))))) # label("spatially-projects-onto-domain-range") .
+
+all A all B  ((occupiesTemporalRegion(A,B)) -> (((exists T  (((instanceOf(A,process,T)) | (instanceOf(A,processBoundary,T))))) & (instanceOf(B,temporalRegion,B))))) # label("occupies-temporal-region-domain-range") .
+
+all ST all T  ((instanceOf(ST,spatiotemporalRegion,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (instanceOf(S,spatialRegion,TP)) & (spatiallyProjectsOnto(ST,S,TP)))))) # label("every-spatiotemporal-region-projects-onto-spatial-region") .
+
+all SR  ((exists T  (instanceOf(SR,spatialRegion,T))) -> (exists ST  (((exists T  (instanceOf(ST,spatiotemporalRegion,T))) & (exists T  (spatiallyProjectsOnto(ST,SR,T))))))) # label("every-spatial-region-is-projection-from-spatiotemporal-region") .
+
+all A all B  ((occupiesSpatiotemporalRegion(A,B)) -> (((exists T  (((instanceOf(A,process,T)) | (instanceOf(A,processBoundary,T))))) & (exists T  (instanceOf(B,spatiotemporalRegion,T)))))) # label("occupies-spatiotemporal-region-domain-range") .
+
+all PROC all TR  ((((exists T  (instanceOf(PROC,process,T))) & (occupiesTemporalRegion(PROC,TR)))) -> (exists INTERVAL  (((instanceOf(INTERVAL,temporalInterval,INTERVAL)) & (temporalPartOf(INTERVAL,TR)))))) # label("process-occupies-at-least-an-interval") .
+
+all O1 all O2 all T1 all T2  ((((exists T  (((instanceOf(O1,process,T)) | (instanceOf(O1,processBoundary,T))))) & (exists T  (instanceOf(O2,process,T))) & (occurrentPartOf(O1,O2)) & (occupiesTemporalRegion(O1,T1)) & (occupiesTemporalRegion(O2,T2)))) -> (temporalPartOf(T1,T2))) # label("parts-of-processes-imply-temporal-regions-part") .
+
+all O1 all O2 all ST1 all ST2  ((((exists T  (((instanceOf(O1,process,T)) | (instanceOf(O1,processBoundary,T))))) & (exists T  (((instanceOf(O2,process,T)) | (instanceOf(O2,processBoundary,T))))) & (occurrentPartOf(O1,O2)) & (occupiesSpatiotemporalRegion(O1,ST1)) & (occupiesSpatiotemporalRegion(O2,ST2)))) -> (occurrentPartOf(ST1,ST2))) # label("parts-of-processes-imply-spatiotemporal-regions-part") .
+
+all P1 all P2  ((((((exists T  (instanceOf(P1,process,T))) | (exists T  (instanceOf(P1,processBoundary,T))))) & (((exists T  (instanceOf(P2,process,T))) | (exists T  (instanceOf(P2,processBoundary,T))))))) -> ((occurrentPartOf(P1,P2)) <-> (exists ST1 exists ST2  (((occupiesSpatiotemporalRegion(P1,ST1)) & (occupiesSpatiotemporalRegion(P2,ST2)) & (occurrentPartOf(ST1,ST2))))))) # label("process-occurrent-part-of-implication") .
+
+all O all T  ((((((exists T1  (instanceOf(O,process,T1))) | (exists T1  (instanceOf(O,processBoundary,T1))))) & (instanceOf(T,temporalRegion,T)))) -> ((occupiesTemporalRegion(O,T)) <-> (((all OP  ((occurrentPartOf(OP,O)) -> (all TP  ((occupiesTemporalRegion(OP,TP)) -> (occurrentPartOf(TP,T)))))) & (-(exists TPRIME  (((-((TPRIME) = (T))) & (occurrentPartOf(TPRIME,T)) & (occupiesTemporalRegion(O,TPRIME)))))))))) # label("occupies-temporal-region-exact") .
+
+all O all ST  ((((((exists T1  (instanceOf(O,process,T1))) | (exists T1  (instanceOf(O,processBoundary,T1))))) & (exists T1  (instanceOf(ST,spatiotemporalRegion,T1))))) -> ((occupiesSpatiotemporalRegion(O,ST)) <-> (((all OP  ((occurrentPartOf(OP,O)) -> (all STP  ((occupiesSpatiotemporalRegion(OP,STP)) -> (occurrentPartOf(STP,ST)))))) & (-(exists STPRIME  (((-((STPRIME) = (ST))) & (occurrentPartOf(STPRIME,ST)) & (occupiesSpatiotemporalRegion(O,STPRIME)))))))))) # label("occupies-spatiotemporal-region-exact") .
+
+
+

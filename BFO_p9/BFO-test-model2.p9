@@ -1,0 +1,16 @@
+cP(x,y,t).cP(y,z,tau).tP(t,tau).cP(x,z,t).
+
+C(x).C(y).C(z).
+T(t).T(tau).
+cP(x,x,t).cP(x,x,tau).
+cP(y,y,t).cP(y,y,tau).
+cP(z,z,t).cP(z,z,tau).
+tP(t,t).
+tP(tau,tau).
+
+cP(y,z,t).
+
+P(p).
+
+eXistsAt(y,t).
+particular(x99).

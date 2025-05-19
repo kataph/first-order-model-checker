@@ -1,0 +1,51 @@
+%environs, locationOf
+
+set(prolog_style_variables)
+
+%all A all B  ((occursIn(A,B)) <-> (environs(B,A))) # label("occurs-in-inverse-of-environs") .
+
+%all T all A all B  ((locatedIn(A,B,T)) <-> (locationOf(B,A,T))) # label("located-in-inverse-of-location-of") .
+
+all P all Q all R  ((((occursIn(P,Q)) & (occurrentPartOf(R,P)))) -> (occursIn(R,Q))) # label("occurs-in-dissective-on-first-argument-occurrent") .
+
+all P all C  ((occursIn(P,C)) -> (all T  ((eXistsAt(P,T)) -> (eXistsAt(C,T))))) # label("occurs-in-site-exists-as-long-as-process-does") .
+
+all P all Q all R all S  ((((locatedIn(P,Q,R)) & (temporalPartOf(S,R)))) -> (locatedIn(P,Q,S))) # label("located-in-dissective-on-third-argument-temporal") .
+
+all P all Q all R all S  ((((locatedIn(P,Q,R)) & (continuantPartOf(Q,S,R)))) -> (locatedIn(P,S,R))) # label("located-in-is-a-lower-bound-on-second-argument-continuant") .
+
+all P all Q all R all S  ((((locatedIn(P,Q,R)) & (continuantPartOf(S,P,R)))) -> (locatedIn(S,Q,R))) # label("located-in-dissective-on-first-argument-continuant") .
+
+all P all Q all R all S  ((((occupiesSpatialRegion(P,Q,R)) & (occupiesSpatialRegion(P,S,R)))) -> ((Q) = (S))) # label("occupies-spatial-region-functional-on-second-argument") .
+
+all P all Q all R all S  ((((occupiesSpatialRegion(P,Q,R)) & (temporalPartOf(S,R)))) -> (occupiesSpatialRegion(P,Q,S))) # label("occupies-spatial-region-dissective-on-third-argument-temporal") .
+
+all P all Q all R all S  ((((spatiallyProjectsOnto(P,Q,R)) & (temporalPartOf(S,R)))) -> (spatiallyProjectsOnto(P,Q,S))) # label("spatially-projects-onto-dissective-on-third-argument-temporal") .
+
+all A all B all C all T all T2  ((((locatedIn(A,B,T)) & (locatedIn(B,C,T2)) & (temporalPartOf(T,T2)))) -> (locatedIn(A,C,T))) # label("located-in-transitive-at-a-time") .
+
+%all P all Q all T  ((((locationOf(P,Q,T)) & (instanceOf(P,continuantFiatBoundary,T)))) -> (instanceOf(Q,continuantFiatBoundary,T))) # label("location-of.continuant-fiat-boundary->continuant-fiat-boundary") .
+all P all Q all T  ((((locatedIn(Q,P,T)) & (instanceOf(P,continuantFiatBoundary,T)))) -> (instanceOf(Q,continuantFiatBoundary,T))) # label("location-of.continuant-fiat-boundary->continuant-fiat-boundary") .
+
+all S all T  ((instanceOf(S,spatialRegion,T)) -> (exists S3  (((instanceOf(S3,threeDimensionalSpatialRegion,T)) & (continuantPartOf(S,S3,T)))))) # label("spatial-regions-are-part-of-3d-space") .
+
+all P all C1 all C2  ((((occursIn(P,C1)) & (all T  ((eXistsAt(P,T)) <-> (((eXistsAt(C2,T)) & (continuantPartOf(C1,C2,T)))))))) -> (occursIn(P,C2))) # label("occurs-in-lower-bound-on-process") .
+
+all A all B all T  ((locatedIn(A,B,T)) -> (exists R1 exists R2 exists T2  (((temporalPartOf(T2,T)) & (occupiesSpatialRegion(A,R1,T2)) & (occupiesSpatialRegion(B,R2,T2)) & (continuantPartOf(R1,R2,T2)))))) # label("when-located-regions-part-of") .
+
+all A all B  ((occursIn(A,B)) -> (((exists T  (((instanceOf(A,process,T)) | (instanceOf(A,processBoundary,T))))) & (exists T  (((instanceOf(B,materialEntity,T)) | (instanceOf(B,site,T)))))))) # label("occurs-in-domain-range") .
+
+all S all SP  ((exists T  (((instanceOf(S,spatialRegion,T)) & (continuantPartOf(SP,S,T))))) -> (all T  ((exists SPRIME  (continuantPartOf(SPRIME,S,T))) -> (continuantPartOf(SP,S,T))))) # label("spatial-region-part-of-another-forever") .
+
+all A all B all T  ((occupiesSpatialRegion(A,B,T)) -> (((((instanceOf(A,independentContinuant,T)) & (-(instanceOf(A,spatialRegion,T))))) & (instanceOf(B,spatialRegion,T)) & (instanceOf(T,temporalRegion,T))))) # label("occupies-spatial-region-domain-range") .
+
+all A all B all T  ((((continuantPartOf(A,B,T)) & (instanceOf(A,independentContinuant,T)) & (-(instanceOf(A,spatialRegion,T))) & (instanceOf(B,independentContinuant,T)) & (-(instanceOf(B,spatialRegion,T))))) -> (locatedIn(A,B,T))) # label("part-of-non-spatial-region-implies-located-in") .
+
+all I all T  ((instanceOf(I,spatialRegion,T)) -> (((instanceOf(I,zeroDimensionalSpatialRegion,T)) | (instanceOf(I,oneDimensionalSpatialRegion,T)) | (instanceOf(I,twoDimensionalSpatialRegion,T)) | (instanceOf(I,threeDimensionalSpatialRegion,T))))) # label("spatial-region-cover") .
+
+all M1 all M2 all S all T  ((((instanceOf(M1,materialEntity,T)) & (occupiesSpatialRegion(M1,S,T)) & (instanceOf(M2,materialEntity,T)) & (occupiesSpatialRegion(M2,S,T)))) -> (((((continuantPartOf(M2,M1,T)) & (continuantPartOf(M1,M2,T)))) | ((M1) = (M2))))) # label("same-space-same-or-coincident-material-entity") .
+
+all A all B all T  ((locatedIn(A,B,T)) -> (((((instanceOf(A,independentContinuant,T)) & (-(instanceOf(A,spatialRegion,T))))) & (((instanceOf(B,independentContinuant,T)) & (-(instanceOf(B,spatialRegion,T))))) & (instanceOf(T,temporalRegion,T))))) # label("located-in-domain-range") .
+
+all C all R all T  ((((instanceOf(C,independentContinuant,T)) & (-(instanceOf(C,spatialRegion,T))) & (instanceOf(R,spatialRegion,T)))) -> (exists T2  (((temporalPartOf(T2,T)) & ((occupiesSpatialRegion(C,R,T2)) <-> (((all CP  ((continuantPartOf(CP,C,T2)) -> (all RP  ((occupiesSpatialRegion(CP,RP,T2)) -> (continuantPartOf(RP,R,T2)))))) & (-(exists RPRIME  (((-((RPRIME) = (R))) & (continuantPartOf(RPRIME,R,T2)) & (occupiesSpatialRegion(C,RPRIME,T2))))))))))))) # label("occupies-spatial-region-exact") .
+

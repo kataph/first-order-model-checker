@@ -1,0 +1,24 @@
+%%% commentati isConcretizedBy e isCarrierOf
+
+set(prolog_style_variables)
+
+%all T all A all B  ((concretizes(A,B,T)) <-> (isConcretizedBy(B,A,T))) # label("concretizes-inverse-of-is-concretized-by") .
+
+%all T all A all B  ((genericallyDependsOn(A,B,T)) <-> (isCarrierOf(B,A,T))) # label("generically-depends-on-inverse-of-is-carrier-of") .
+
+all P all Q all R all S  ((((concretizes(P,Q,R)) & (temporalPartOf(S,R)))) -> (concretizes(P,Q,S))) # label("concretizes-dissective-on-third-argument-temporal") .
+
+all T all G  ((instanceOf(G,genericallyDependentContinuant,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (concretizes(S,G,TP)))))) # label("g-depends-concretized-at-least-once") .
+
+all G all C all T  ((genericallyDependsOn(G,C,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (inheresIn(S,C)) & (concretizes(S,G,TP)))))) # label("g-depends-on-means-theres-a-sdc-that-concretizes-it") .
+
+all A all B all T  ((concretizes(A,B,T)) -> (((((instanceOf(A,specificallyDependentContinuant,T)) | (instanceOf(A,process,T)))) & (instanceOf(B,genericallyDependentContinuant,T)) & (instanceOf(T,temporalRegion,T))))) # label("concretizes-domain-range") .
+
+all A all B all T  ((genericallyDependsOn(A,B,T)) -> (((instanceOf(A,genericallyDependentContinuant,T)) & (((instanceOf(B,independentContinuant,T)) & (-(instanceOf(B,spatialRegion,T))))) & (instanceOf(T,temporalRegion,T))))) # label("generically-depends-on-domain-range") .
+
+all G all B all SDC  ((((exists T  (instanceOf(G,genericallyDependentContinuant,T))) & (exists T  (instanceOf(SDC,specificallyDependentContinuant,T))) & (exists T  (instanceOf(B,independentContinuant,T))))) -> (all T  ((((concretizes(SDC,G,T)) & (inheresIn(SDC,B)))) -> (genericallyDependsOn(G,B,T))))) # label("sdc-concretizes-means-bearer-generically-depends") .
+
+all GDC all P all T  ((((instanceOf(GDC,genericallyDependentContinuant,T)) & (participatesIn(GDC,P,T)))) -> (exists TP exists B  (((temporalPartOf(TP,T)) & (concretizes(B,GDC,TP)) & (((((instanceOf(B,specificallyDependentContinuant,TP)) & (exists IC  (((specificallyDependsOn(B,IC)) & (participatesIn(IC,P,TP))))))) | (((occurrentPartOf(B,P)) & (eXistsAt(B,TP)))))))))) # label("participation-of-generically-dependent-continuant") .
+
+
+

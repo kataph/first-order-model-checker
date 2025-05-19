@@ -1,0 +1,94 @@
+%%%%commento i predicati definiti di minore importanza, che non appaiono nel modello -- attenzione che compaiono in un paio di assiomi, in essi li ho sostituiti con il loro definiente
+%%%%In particolare: 1-has hasContinuantPart 2-hasProperContinuantPart
+%%%%la strategia "equivalence" riesce a farli tutti rapidamente tranne quelli due prenex con 5 quantificatori, senza si schianta al secondo assioma. 
+%%%%nota che il modello ha 98 costanti e 30 predicati.  
+%%%%un'altra cosa da fare è l'ambiguità di existsAt(X,T) come exists A t(X,T) che è da risolvere in qualche modo. Per adesso ho rinominato in eXistsAt
+
+%all T all A all B  ((continuantPartOf(A,B,T)) <-> (hasContinuantPart(B,A,T))) # label("continuant-part-of-inverse-of-has-continuant-part") .
+
+all A all T  ((instanceOf(A,independentContinuant,T)) -> (continuantPartOf(A,A,T))) # label("continuant-part-of-is-reflexive-on-independent-continuant-at-a-time") .
+
+%all T all A all B  ((properContinuantPartOf(A,B,T)) <-> (hasProperContinuantPart(B,A,T))) # label("proper-continuant-part-of-inverse-of-has-proper-continuant-part") .
+
+all P all Q all R  ((((eXistsAt(P,Q)) & (continuantPartOf(R,P,Q)))) -> (eXistsAt(R,Q))) # label("exists-at-dissective-on-first-argument-continuant") .
+
+all FP all T all P  ((((instanceOf(FP,fiatPoint,T)) & (continuantPartOf(P,FP,T)))) -> ((P) = (FP))) # label("fiat-point-is-an-atom") .
+
+all P all Q all R all S  ((((continuantPartOf(P,Q,R)) & (temporalPartOf(S,R)))) -> (continuantPartOf(P,Q,S))) # label("continuant-part-of-dissective-on-third-argument-temporal") .
+
+%all P all Q all T  ((((hasContinuantPart(P,Q,T)) & (instanceOf(P,fiatPoint,T)))) -> (instanceOf(Q,fiatPoint,T))) # label("has-continuant-part.fiat-point->fiat-point") .
+all P all Q all T  ((((continuantPartOf(Q,P,T)) & (instanceOf(P,fiatPoint,T)))) -> (instanceOf(Q,fiatPoint,T))) # label("has-continuant-part.fiat-point->fiat-point") .
+
+all X all Y all T  ((properContinuantPartOf(X,Y,T)) <-> (((continuantPartOf(X,Y,T)) & (-(continuantPartOf(Y,X,T)))))) # label("definition-of-proper-continuant-part-of") .
+
+all P all Q all R all S  ((((properContinuantPartOf(P,Q,R)) & (temporalPartOf(S,R)))) -> (properContinuantPartOf(P,Q,S))) # label("proper-continuant-part-of-dissective-on-third-argument-temporal") .
+
+all P all Q all T  ((((continuantPartOf(P,Q,T)) & (instanceOf(P,materialEntity,T)))) -> (instanceOf(Q,materialEntity,T))) # label("continuant-part-of.material-entity->material-entity") .
+
+all P all Q all T  ((continuantPartOf(P,Q,T)) -> ((instanceOf(P,spatialRegion,T)) <-> (((instanceOf(Q,spatialRegion,T)))))) # label("continuant-part-of.spatial-region<->spatial-region") .
+
+%all P all Q all T  ((((hasContinuantPart(P,Q,T)) & (instanceOf(P,fiatSurface,T)))) -> (instanceOf(Q,continuantFiatBoundary,T))) # label("has-continuant-part.fiat-surface->continuant-fiat-boundary") .
+all P all Q all T  ((((continuantPartOf(Q,P,T)) & (instanceOf(P,fiatSurface,T)))) -> (instanceOf(Q,continuantFiatBoundary,T))) # label("has-continuant-part.fiat-surface->continuant-fiat-boundary") .
+
+%all P all Q all T  ((((hasContinuantPart(P,Q,T)) & (instanceOf(P,threeDimensionalSpatialRegion,T)))) -> (instanceOf(Q,spatialRegion,T))) # label("has-continuant-part.three-dimensional-spatial-region->spatial-region") .
+all P all Q all T  ((((continuantPartOf(Q,P,T)) & (instanceOf(P,threeDimensionalSpatialRegion,T)))) -> (instanceOf(Q,spatialRegion,T))) # label("has-continuant-part.three-dimensional-spatial-region->spatial-region") .
+
+%all P all Q all T  ((((hasContinuantPart(P,Q,T)) & (instanceOf(P,continuantFiatBoundary,T)))) -> (instanceOf(Q,continuantFiatBoundary,T))) # label("has-continuant-part.continuant-fiat-boundary->continuant-fiat-boundary") .
+all P all Q all T  ((((continuantPartOf(Q,P,T)) & (instanceOf(P,continuantFiatBoundary,T)))) -> (instanceOf(Q,continuantFiatBoundary,T))) # label("has-continuant-part.continuant-fiat-boundary->continuant-fiat-boundary") .
+
+all P all Q all T  ((((continuantPartOf(P,Q,T)) & (instanceOf(P,site,T)))) -> (((instanceOf(Q,site,T)) | (instanceOf(Q,materialEntity,T))))) # label("continuant-part-of.site->or-site-material-entity") .
+
+all P all Q all T  ((continuantPartOf(P,Q,T)) -> ((instanceOf(P,independentContinuant,T)) <-> (((instanceOf(Q,independentContinuant,T)))))) # label("continuant-part-of.independent-continuant<->independent-continuant") .
+
+all A all B all C all T all T2  ((((continuantPartOf(A,B,T)) & (continuantPartOf(B,C,T2)) & (temporalPartOf(T,T2)))) -> (continuantPartOf(A,C,T))) # label("continuant-part-of-transitive-at-a-time") .
+
+all A all B all T  ((continuantPartOf(A,B,T)) -> (((instanceOf(A,continuant,T)) & (instanceOf(B,continuant,T)) & (instanceOf(T,temporalRegion,T))))) # label("continuant-part-of-domain-range") .
+
+%all P all Q all T  ((((hasContinuantPart(P,Q,T)) & (instanceOf(P,fiatLine,T)))) -> (((instanceOf(Q,fiatLine,T)) | (instanceOf(Q,fiatPoint,T))))) # label("has-continuant-part.fiat-line->or-fiat-line-fiat-point") .
+all P all Q all T  ((((continuantPartOf(Q,P,T)) & (instanceOf(P,fiatLine,T)))) -> (((instanceOf(Q,fiatLine,T)) | (instanceOf(Q,fiatPoint,T))))) # label("has-continuant-part.fiat-line->or-fiat-line-fiat-point") .
+
+%all P all Q all T  ((((hasContinuantPart(P,Q,T)) & (instanceOf(P,site,T)))) -> (((instanceOf(Q,site,T)) | (instanceOf(Q,continuantFiatBoundary,T))))) # label("has-continuant-part.site->or-site-continuant-fiat-boundary") .
+all P all Q all T  ((((continuantPartOf(Q,P,T)) & (instanceOf(P,site,T)))) -> (((instanceOf(Q,site,T)) | (instanceOf(Q,continuantFiatBoundary,T))))) # label("has-continuant-part.site->or-site-continuant-fiat-boundary") .
+
+all A all B all T  ((properContinuantPartOf(A,B,T)) -> (((instanceOf(A,continuant,T)) & (instanceOf(B,continuant,T)) & (instanceOf(T,temporalRegion,T))))) # label("proper-continuant-part-of-domain-range") .
+
+%all P all Q all T  ((((hasContinuantPart(P,Q,T)) & (instanceOf(P,zeroDimensionalSpatialRegion,T)))) -> (instanceOf(Q,zeroDimensionalSpatialRegion,T))) # label("has-continuant-part.zero-dimensional-spatial-region->zero-dimensional-spatial-region") .
+all P all Q all T  ((((continuantPartOf(Q,P,T)) & (instanceOf(P,zeroDimensionalSpatialRegion,T)))) -> (instanceOf(Q,zeroDimensionalSpatialRegion,T))) # label("has-continuant-part.zero-dimensional-spatial-region->zero-dimensional-spatial-region") .
+
+all A all B all C all T all T2  ((((properContinuantPartOf(A,B,T)) & (properContinuantPartOf(B,C,T2)) & (temporalPartOf(T,T2)))) -> (properContinuantPartOf(A,C,T))) # label("proper-continuant-part-of-transitive-at-a-time") .
+
+all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))) # label("fiat-line-occupies-1d-spatial-regions") .
+
+all X all T  ((instanceOf(X,fiatPoint,T)) -> (exists TP exists S  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,zeroDimensionalSpatialRegion,TP)))))) # label("fiat-point-occupies-0d-spatial-regions") .
+
+all X all T  ((instanceOf(X,fiatSurface,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,twoDimensionalSpatialRegion,TP)))))) # label("fiat-surface-occupies-2d-spatial-regions") .
+
+%all P all Q all T  ((((hasContinuantPart(P,Q,T)) & (instanceOf(P,materialEntity,T)))) -> (((instanceOf(Q,site,T)) | (instanceOf(Q,continuantFiatBoundary,T)) | (instanceOf(Q,materialEntity,T))))) # label("has-continuant-part.material-entity->or-site-continuant-fiat-boundary-material-entity") .
+all P all Q all T  ((((continuantPartOf(Q,P,T)) & (instanceOf(P,materialEntity,T)))) -> (((instanceOf(Q,site,T)) | (instanceOf(Q,continuantFiatBoundary,T)) | (instanceOf(Q,materialEntity,T))))) # label("has-continuant-part.material-entity->or-site-continuant-fiat-boundary-material-entity") .
+
+%all P all Q all T  ((((hasContinuantPart(P,Q,T)) & (instanceOf(P,oneDimensionalSpatialRegion,T)))) -> (((instanceOf(Q,oneDimensionalSpatialRegion,T)) | (instanceOf(Q,zeroDimensionalSpatialRegion,T))))) # label("has-continuant-part.one-dimensional-spatial-region->or-one-dimensional-spatial-region-zero-dimensional-spatial-region") .
+all P all Q all T  ((((continuantPartOf(Q,P,T)) & (instanceOf(P,oneDimensionalSpatialRegion,T)))) -> (((instanceOf(Q,oneDimensionalSpatialRegion,T)) | (instanceOf(Q,zeroDimensionalSpatialRegion,T))))) # label("has-continuant-part.one-dimensional-spatial-region->or-one-dimensional-spatial-region-zero-dimensional-spatial-region") .
+
+all A all B  ((((exists T  (((instanceOf(A,objectAggregate,T)) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) & (all T  ((continuantPartOf(A,B,T)) <-> (continuantPartOf(B,A,T)))))) -> ((A) = (B))) # label("continuant-part-of-is-extent-antisymmetric-for-object-aggregates") .
+
+all M all S  ((exists T  (((occupiesSpatialRegion(M,S,T)) & (instanceOf(S,oneDimensionalSpatialRegion,T))))) -> (all T1 all S1  ((occupiesSpatialRegion(M,S1,T1)) -> (instanceOf(S1,oneDimensionalSpatialRegion,T1))))) # label("occupying-a-one-dimensional-spatial-region-is-rigid") .
+
+all M all S  ((exists T  (((occupiesSpatialRegion(M,S,T)) & (instanceOf(S,twoDimensionalSpatialRegion,T))))) -> (all T1 all S1  ((occupiesSpatialRegion(M,S1,T1)) -> (instanceOf(S1,twoDimensionalSpatialRegion,T1))))) # label("occupying-a-two-dimensional-spatial-region-is-rigid") .
+
+all M all S  ((exists T  (((occupiesSpatialRegion(M,S,T)) & (instanceOf(S,zeroDimensionalSpatialRegion,T))))) -> (all T1 all S1  ((occupiesSpatialRegion(M,S1,T1)) -> (instanceOf(S1,zeroDimensionalSpatialRegion,T1))))) # label("occupying-a-zero-dimensional-spatial-region-is-rigid") .
+
+all M all S  ((exists T  (((occupiesSpatialRegion(M,S,T)) & (instanceOf(S,threeDimensionalSpatialRegion,T))))) -> (all T1 all S1  ((occupiesSpatialRegion(M,S1,T1)) -> (instanceOf(S1,threeDimensionalSpatialRegion,T1))))) # label("occupying-a-three-dimensional-spatial-region-is-rigid") .
+
+all M all T  ((((instanceOf(M,materialEntity,T)) & (exists MP  (((continuantPartOf(MP,M,T)) & (-((MP) = (M)))))))) -> (exists MP  (((-((MP) = (M))) & (continuantPartOf(MP,M,T)) & (-(instanceOf(MP,immaterialEntity,T))))))) # label("material-entity-has-at-least-one-non-immaterial-entity-as-proper-part") .
+
+%all P all Q all T  ((((hasContinuantPart(P,Q,T)) & (instanceOf(P,twoDimensionalSpatialRegion,T)))) -> (((instanceOf(Q,twoDimensionalSpatialRegion,T)) | (instanceOf(Q,oneDimensionalSpatialRegion,T)) | (instanceOf(Q,zeroDimensionalSpatialRegion,T))))) # label("has-continuant-part.two-dimensional-spatial-region->or-two-dimensional-spatial-region-one-dimensional-spatial-region-zero-dimensional-spatial-region") .
+all P all Q all T  ((((continuantPartOf(Q,P,T)) & (instanceOf(P,twoDimensionalSpatialRegion,T)))) -> (((instanceOf(Q,twoDimensionalSpatialRegion,T)) | (instanceOf(Q,oneDimensionalSpatialRegion,T)) | (instanceOf(Q,zeroDimensionalSpatialRegion,T))))) # label("has-continuant-part.two-dimensional-spatial-region->or-two-dimensional-spatial-region-one-dimensional-spatial-region-zero-dimensional-spatial-region") .
+
+all A all B  ((exists T  (((instanceOf(A,independentContinuant,T)) & (-(instanceOf(A,objectAggregate,T))) & (instanceOf(B,independentContinuant,T)) & (-(instanceOf(B,objectAggregate,T))) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) -> ((A) = (B))) # label("continuant-part-of-is-antisymmetric-except-for-object-aggregates") .
+
+all T all X all Y  ((((instanceOf(X,continuant,T)) & (instanceOf(Y,continuant,T)) & (instanceOf(T,temporalRegion,T)))) -> ((((continuantPartOf(X,Y,T)) & (-((X) = (Y))))) -> (exists Z  (((instanceOf(Z,continuant,T)) & (continuantPartOf(Z,Y,T)) & (-((Z) = (Y))) & (-(exists OVERLAP  (((instanceOf(OVERLAP,continuant,T)) & (continuantPartOf(OVERLAP,X,T)) & (continuantPartOf(OVERLAP,Z,T))))))))))) # label("continuant-part-of-has-weak-supplementation-at-a-time") .
+
+all X all Y all T  ((((instanceOf(X,continuant,T)) & (instanceOf(Y,continuant,T)) & (instanceOf(T,temporalRegion,T)))) -> ((exists OVERLAP  (((instanceOf(OVERLAP,continuant,T)) & (continuantPartOf(OVERLAP,X,T)) & (continuantPartOf(OVERLAP,Y,T))))) -> (exists OVERLAP  (((instanceOf(OVERLAP,continuant,T)) & (all W  ((instanceOf(W,continuant,T)) -> ((continuantPartOf(W,OVERLAP,T)) <-> (((continuantPartOf(W,X,T)) & (continuantPartOf(W,Y,T)))))))))))) # label("continuant-part-of-has-a-unique-product-at-a-time") .
+
+
+
