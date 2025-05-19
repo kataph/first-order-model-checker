@@ -1,5 +1,5 @@
 from check import P9FreeVariablesExtractor, P9Evaluator, P9Explainer, P9ModelReader, prover9_parser
-from basic_formulas_manipulation import treeExplainerRED, treeExplainerReturning, treeExplainerReturningRED, ansi2htmlConverter
+from basic_formulas_manipulation import treeExplainerRED, treeExplainerReturning, treeExplainerReturningRED
 from model import Model
 from lark import Tree
 
@@ -152,9 +152,7 @@ def tests(options):
             if not evaluation == ground_eval:
                 treeExplainerRED(axiomAST)
                 explanation_txt = treeExplainerReturning(axiomAST)
-                explanation_html = ansi2htmlConverter.convert(treeExplainerReturningRED(axiomAST))
                 explanation_file = "explanation"
-                with open(explanation_file+".html", "w", encoding='utf-8') as fo: fo.write(explanation_html)
                 with open(explanation_file+".txt", "w", encoding='utf-8') as fo: fo.write(explanation_txt)
                 raise TypeError(f"Test failed, see printed explanation above... Also saved in file {explanation_file} (both .html and .txt)")
             
@@ -165,7 +163,7 @@ def tests(options):
             print(y)
             print(z)
             print("==============================================================================")
-        print("all the previous tests where passed: ")
+        print("all the previous tests where passed.")
         
         # loop_on_file(file_path=r"C:\Users\Francesco\Desktop\Work_Units\fol_model_checker\test_p9_parsing.txt")
         # print("axioms signature after full variable extraction of file"+r"C:\Users\Francesco\Desktop\Work_Units\fol_model_checker\test_p9_parsing.txt", ....axioms_signature)

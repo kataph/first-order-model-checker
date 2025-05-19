@@ -141,7 +141,7 @@ class P9Evaluator(Interpreter):
     def pass_car(self, tree: Tree):
         return self.visit_children(tree)[0]
     def pass_empty_substitutions_and_set_flag(self, tree: Tree):
-        assert (children_len := len(tree.children)) == 1 or (children_len == 2 and isinstance(tree.children[-1],Token)), f"A line should only have one child or two with the second being a label token. Is something wring with the grammar? Tree is {tree} and is also in red {treeExplainerRED(tree)}"
+        assert (children_len := len(tree.children)) == 1 or (children_len == 2 and isinstance(tree.children[-1],Tree) and tree.children[-1].data == "label"), f"A line should only have one child or two with the second being a label token. Is something wrong with the grammar? Tree is {tree} and is also in red. The number of children is {len(tree.children)} and the type of the last child is {type(tree.children[-1])} and its print is {str(tree.children[-1])}.{treeExplainerRED(tree)}"
         self.is_a_tqdm_running = False
         if children_len == 1:
             (child,) = tree.children
