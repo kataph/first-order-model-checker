@@ -42,6 +42,7 @@ The timeout can be deactivated using the `--no_timeout` option, in which case th
 Finally, if multiple axioms are present in the axiom file, and a false axiom is met, the default behavior is stopping the evaluation and supplying an explanation. This can be modified with the `--break_on_false` option: if set to `false`, the program will pass to the next axiom after having met a false axiom.
 
 If a false axiom is met an explanation will be generated and saved to a file. The explanation is constituted by a tree representing the axiom, where each node has a truth value. The truth value of a quantifier is accompanied also by the last set of constants the truth value was verified on before finding the axiom false. 
+Note that in the brute force and equivalence strategies, the shape of the formula is preserved, while in the range strategy the formula is changed to an equivalent formula in order to optimize the evaluation and may not be immediately recognizable.  
 If multiple false axioms are found, then an explanation for each one will be generated and saved to a different file, numbered with the line number of where the axiom is located in the axioms file. 
 
 ## TODOS
