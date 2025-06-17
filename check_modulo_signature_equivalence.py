@@ -23,12 +23,6 @@ def swap(term: tuple[Any], c1: Any, c2) -> tuple[Any]:
         if element == c2:
             swapped[idx] = c1
     return tuple(swapped)
-
-def test_swap():
-    assert swap((1,2,3), 1, 1) == (1,2,3); print("swap((1,2,3), 1, 1) == (1,2,3) OK")
-    assert swap((1,2,3), 1, 2) == (2,1,3); print("swap((1,2,3), 1, 2) == (2,1,3) OK")
-    assert swap((1,0,3), 1, 2) == (2,0,3); print("swap((1,0,3), 1, 2) == (2,0,3) OK")
-    assert swap((0,0,3), 1, 2) == (0,0,3); print("swap((0,0,3), 1, 2) == (0,0,3) OK")
     
 def find_equivalent(terms: list[tuple[Any]], model: Model) -> list[set[Any]]: 
     """Given the terms linked to a predicate the equivalent classes of constants w.r.to that predicate are returned. It includes the singleton classes. 
@@ -81,14 +75,6 @@ def find_equivalent(terms: list[tuple[Any]], model: Model) -> list[set[Any]]:
             
     return classes
 
-def test_find_equivalent():
-    m = Model()
-    m.signature.constants = [1,2,3,4,5]
-    assert find_equivalent([(1,2,3),(1,3,2),(2,2,2),(3,3,3)], m) == [{2,3}, {4,5}, {1}]; print("find_equivalent([(1,2,3),(1,3,2),(2,2,2),(3,3,3)], m) == [{2,3}, {4,5}, {1}] OK")
-    assert find_equivalent([(1,2,3),(2,2,2),(3,3,3)], m) == [{4,5}, {1}, {2}, {3}]; print("find_equivalent([(1,2,3),(2,2,2),(3,3,3)], m) == [{4,5}, {1}, {2}, {3}] OK")
-    assert find_equivalent([(1,2,3),(2,2,2),(3,3,3),(4,4,4)], m) == [{1}, {2}, {3}, {4}, {5}]; print("find_equivalent([(1,2,3),(2,2,2),(3,3,3),(4,4,4)], m) == [{1}, {2}, {3}, {4}, {5}] OK")
-    assert find_equivalent([(1,3),(2,3)], m) == [{1,2}, {4,5}, {3}]; print("find_equivalent([(1,3),(2,3)], m) == [{1,2}, {4,5}, {3}] OK")
-
 def intersects_equivalence_classes(equivalence_relations: list[list[set[Any]]], model: Model):
     """Given a list of equivalence relations, it returns their intersection (w.r.to. a model supplying a list of common constants).
     E.g. [[{1,2,3},{4,5}],[{1,2},{3},{4,5}]], [1,2,3,4,5] --> [{1, 2}, {3}, {4, 5}]"""
@@ -106,18 +92,4 @@ def intersects_equivalence_classes(equivalence_relations: list[list[set[Any]]], 
         intersection_relation.append({x})
     if set() in intersection_relation:
         raise TypeError(f"empty set was found in intersection relation {intersection_relation} from inputs equivalence_relations = {equivalence_relations}. This should not happen!")
-    return intersection_relation
-    
-
-def test_intersects_equivalence_classes():
-    m = Model()
-    m.signature.constants = [1,2,3,4,5]
-    assert intersects_equivalence_classes([[{1,2,3},{4,5}],[{1,2},{3},{4,5}]], m) == [{1, 2}, {3}, {4, 5}]; print("intersects_equivalence_classes([[{1,2,3},{4,5}],[{1,2},{3},{4,5}]], m) == [{1, 2}, {3}, {4, 5}]")
-    assert intersects_equivalence_classes([[{1,2,3},{4,5}],[{1,2},{3},{4,5}], [{1,2},{3},{4},{5}]], m) == [{1, 2}, {3}, {4}, {5}]; print("intersects_equivalence_classes([[{1,2,3},{4,5}],[{1,2},{3},{4,5}], [{1,2},{3},{4},{5}]], m) == [{1, 2}, {3}, {4}, {5}]")
-    assert intersects_equivalence_classes([[{1,2,3},{4,5}],[{1,2}]], m) == [{1, 2}, {3}, {4}, {5}]; print("intersects_equivalence_classes([[{1,2,3},{4,5}],[{1,2}]], m) == [{1, 2}, {3}, {4}, {5}]")
-
-if __name__ == "__main__":
-    # test_swap()
-    # test_find_equivalent()
-    # test_intersects_equivalence_classes()
-    pass
+    return intersection_relation    

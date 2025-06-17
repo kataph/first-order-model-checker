@@ -17,59 +17,6 @@ from model import prover9_parser, Signature, Model, P9ModelReader
 
 POSSIBLE_OPTIONS = {"equivalence", "range"}
 
-# text = '(all X (cat(X) <-> (ed(X) & (exists T1 (pre(X,T1))) & all T (pre(X,T) -> tat(X,T)))))'
-# text = '(A(c) & B(y))'
-# text = '(P(c1,c2) & Q(x) & T(v)) .'
-# text = '''(P(c1,c2) & Q(x) & T(v)) .
-#             Q(c)    . '''
-# text = '''(P(c1,c2) & Q(x) & T(v)) .
-#             True    . 
-#             (P(c, c4) & True)    . 
-#             False    . '''
-# text = 'all X A(X,Y) .'
-# text = 'all X A(X,Y,c2) .'
-# text = 'all X A(X,Y,c2) & P(X,Z,c) .'
-# text = 'all X A(X,Y) & exists Z P(Z) .'
-# text = 'all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l).'
-# text = 'all X A(X,Y,c2) | - exists Z P(X,Z,c) .'
-
-
-class P9Explainer(Visitor):
-    """Visits tree and reads explanations of evaluation. Obsolete, use treeExplainer """
-    
-    def explain(self, tree: Tree):
-        self.visit(tree)
-        return ">>>explanation should appear nearby<<<"
-
-    def explain_(self, tree: Tree):
-        if hasattr(tree, "explanation"):
-            print(f"node {tree.data} with presentation \n {tree.pretty()} --> {tree.explanation}")
-    
-    equality_atom = explain_
-    predicate = explain_
-    existential_quantification = explain_
-    universal_quantification = explain_
-    conjunction = explain_
-    disjunction = explain_
-    conjunction_exc = explain_
-    disjunction_exc = explain_
-    entailment = explain_
-    reverse_entailment = explain_
-    equivalence_entailment = explain_
-    entailment_exc = explain_
-    reverse_entailment_exc = explain_
-    equivalence_entailment_exc = explain_
-    negation = explain_
-    negation_exc = explain_
-
-    # do_nothing = lambda self, items: items
-    # car = lambda self, items: items[0]
-    # start = car
-    # lines = car
-    # line = car
-    # sentence = car
-
-    # label = lambda self, items: None
 
 class P9Evaluator(Interpreter):
     """Evaluates a sentence give a model. 
@@ -118,10 +65,10 @@ class P9Evaluator(Interpreter):
         for clazz in classes:
             if len(clazz) > 0:
                 representatives.append(list(clazz)[0])
-        # print(f"representatives are len {len(representatives)} and they are {representatives} and the classes are \n {classes}")
         return representatives
 
-    def evaluate(self, tree: Tree):
+    def evaluate(self, tree: Tree) -> list[bool]:
+        """Return type is list of bool and not bool because evaluation could be applied to lists of axioms (a string of multiple lines, with one axiom per line)"""
         self.original_tree = tree
         ret = self.visit(tree)
         if ret == None:
@@ -298,16 +245,6 @@ class P9Evaluator(Interpreter):
         tree.explanation = f"False with anything"
         return False
 
-def loop_on_file(file_path: str, action) -> None:
-    lines = open(file_path, "rt").readlines()
-    for line in lines:
-        no_comment_line = re.sub("%.*", "", line)
-        no_comment_line = no_comment_line.replace("\n","")
-        if no_comment_line in ["", "\n"] :
-            continue
-        axiom = no_comment_line
-        ...
-
 def read_model_file(model_file: str) -> Model:
     """Read file as a whole and returns corresponding model"""
     model_text = open(model_file, "rt").read()
@@ -322,11 +259,7 @@ def read_model_file(model_file: str) -> Model:
         raise TypeError(f"Equality was found in the model. It should not be there, and instead all constants should be assumed to be different")
 
     print(f"...read model file. The model has {len(model.signature.constants)} constants and {len(model.signature.predicates)} predicates")
-    #print(f"The model ordered table is >>> {model.ordered_truth_table}")
-    #print(f"The model truth table is >>> {model.truth_table}")
     return model
-
-# model = read_model_file("model.p9")
 
 def check_axioms_file(axioms_file: str, model: Model, options: list[str], timeout: int, timeout_aux: int, no_timeout: bool, breakOnFalse: bool, multiprocessing_required = False, processes_number = 4):
     """Read file line by line as a whole and checks axioms one-by-one against given model"""
@@ -336,6 +269,7 @@ def check_axioms_file(axioms_file: str, model: Model, options: list[str], timeou
     if not multiprocessing_required:
         check_lines(lines, model, options, timeout, timeout_aux, no_timeout, breakOnFalse)
     else: 
+        # TODO: consciously not implemented
         if processes_number < 1: raise TypeError(f"Asked for multiprocessing with non-positive process number")
         subliness = [lines[i::processes_number] for i in range(processes_number)]
         for sublines in subliness:
@@ -346,7 +280,6 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
     p9variables = P9FreeVariablesExtractor()
     p9evaluator = P9Evaluator(model, options)
     p9evaluator_equivalence = P9Evaluator(model, ["equivalence"])
-    p9explainer = P9Explainer()
     p9LabelRemover = RemoveLabels()
     
     axioms_true = 0
@@ -391,7 +324,7 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
             print(f"Started a thread with the strategy from the given options ({options})")
             try:
                 if "range" in options:
-                    axiomsAST_for_first_thread = toBMNNF.adjust_transform_repeatedly(axiomsAST_for_first_thread) # <- nukes on continuant-part-of-has-weak-supplementation-at-a-time
+                    axiomsAST_for_first_thread = toBMNNF.adjust_transform_repeatedly(axiomsAST_for_first_thread) 
                 evaluation = p9evaluator.evaluate(axiomsAST_for_first_thread)
             except Exception as e:
                 raise TypeError(f"Got an exception during f_option: >>>{e}<<<")
@@ -420,8 +353,6 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
                 except multiprocessing.TimeoutError:
                     print("==="*50)
                     print("Timeout again! Nothing worked!")
-                    open("delete-exception-equivalence.txt","w",encoding = "utf-8").write(treeExplainerReturning(axiomsAST_for_equivalence))
-                    open("delete-exception-options.txt","w",encoding = "utf-8").write(treeExplainerReturning(axiomsAST))
                     print("==="*50)
                 except Exception as e:
                     raise TypeError(f"got from second strat {e}")
@@ -433,28 +364,19 @@ def check_lines(lines: list[str], model: Model, options: list[str], timeout: int
             evaluation = p9evaluator.evaluate(axiomsAST)
         
         
-        # evaluation = p9evaluator.evaluate(axiomsAST)
-        # except Exception as e:
-        #     open("delete-exception-equivalence.txt","w",encoding = "utf-8").write(treeExplainerReturning(axiomsAST_for_equivalence))
-        #     open("delete-exception-options.txt","w",encoding = "utf-8").write(treeExplainerReturning(axiomsAST))
-        #     raise Exception(f"Got exception during evaluation (input was the printed in delete-exception-options/equivalence.txt): >>>{e}<<<")
-        
         print(f"...evaluation result is >>>{evaluation}<<<")
         if evaluation == [False]:
             axioms_false += 1
             print(f"Evaluation of axiom >>>{axiom_text}<<< is False! Generating explanation...")
-            #p9explainer.explain(axiomsAST)
-            #treeExplainerRED(axiomsAST) <-- too big
             explanation_label = i
             with open(f"explanation_{explanation_label}.txt", "w", encoding="utf-8") as fo:
                 fo.write(treeExplainerReturning(axiomsAST))
-            # print(f"Above should have appeared an explanation of why >>>{axiom_text}<<< is False.") 
-            print(f"...See the local file 'explanation_{explanation_label}.txt' for the explanation.")# in case the generated explanation does not fit the screen.")
+            print(f"...See the local file 'explanation_{explanation_label}.txt' for the explanation.")
             if "equivalence" in options or timeoutOccurred:
                 open(f"equivalence-classes_{explanation_label}.txt", "w").write(str((p9evaluator_equivalence if timeoutOccurred else p9evaluator).equivalences))
                 print(f"Also, since the equivalence strategy was employed, you should check the equivalence classes that were employed in the file equivalence-classes_{explanation_label}.txt")
             if breakOnFalse:
-                break #TODO
+                break #TODO: possibility to extend behavior when finding a false axiom, as of now, it just continues or stops
         elif evaluation == [True]:
             axioms_true += 1
         else:
@@ -519,58 +441,6 @@ class P9SignatureExtractor(Transformer):
 
     label = lambda self, items: None
 
-def test_signature_extraction():
-    p9sig = P9SignatureExtractor()
-    assert p9sig.transform(prover9_parser.parse("all X exists Y P(X,Y) & X=Y .")) == {'=', 'P'}; print("""p9sig.transform(prover9_parser.parse("all X exists Y P(X,Y) & X=Y .")) == {'=', 'P'}""")
-    assert p9sig.transform(prover9_parser.parse("((all X exists Y P(X,Y) & X=Y) | (exists X exists Z all U all V (E(X,y,Z) & R(U,V)))) .")) == {'=', 'P', 'E', 'R'}; print("""p9sig.transform(prover9_parser.parse("((all X exists Y P(X,Y) & X=Y) | (exists X exists Z all U all V (E(X,y,Z) & R(U,V)))) .")) == {'=', 'P', 'E', 'R'}""")
-    assert p9sig.transform(prover9_parser.parse("all X all Y P(X) & Q(Y) .")) == {'P', 'Q'}; print("""p9sig.transform(prover9_parser.parse("all X all Y P(X) & Q(Y) .")) == {'P', 'Q'}""")
-
-
-def benchmark():
-    axioms = """(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T)).
-        (cP(x,z,t)).
-        (all X (cP(x,z,t) | False)).
-        (True)."""
-    axioms = axioms.split("\n")
-    model_txt = """cP(x,y,t).cP(y,z,tau).tP(t,tau).cP(x,z,t).
-
-        C(x).C(y).C(z).
-        T(t).T(tau).
-        cP(x,x,t).cP(x,x,tau).
-        cP(y,y,t).cP(y,y,tau).
-        cP(z,z,t).cP(z,z,tau).
-        tP(t,t).
-        tP(tau,tau).
-
-        cP(y,z,t).
-
-        P(p)."""
-    
-    def add_counter_with_options(func):
-        def wrapper(*args, **kwargs):
-            s = time.perf_counter()
-            out = func(*args, **kwargs)
-            e = time.perf_counter()
-            return f"Execution time of {func.__name__} is {e-s}, if with options = {kwargs["options"]}"
-        return wrapper
-    for i in range(10):
-        model_txt += (".".join([f"P({i*10+j})" for j in range(5)]) + ".")
-        model = P9ModelReader().read_model(prover9_parser.parse(model_txt))
-        print(f"Working with model with constants: {model.signature.constants}")
-        #o1 = add_counter_with_options(check_lines)(axioms, model, options = []) <- this explodes soon
-        o2 = add_counter_with_options(check_lines)(axioms, model, options = ["equivalence"])
-        o3 = add_counter_with_options(check_lines)(axioms, model, options = ["range"])
-        o4 = add_counter_with_options(check_lines)(axioms, model, options = ["equivalence","range"])
-        print("\n",o2,"\n",o3,"\n",o4) #print("\n",o1,"\n",o2,"\n",o3,"\n",o4)
-    for i in range(10):
-        model_txt += f"cP(x{i},y{i},t{i}).cP(y{i},z{i},tau{i}).tP(t{i},tau{i}).cP(x{i},z{i},t{i})."
-        model = P9ModelReader().read_model(prover9_parser.parse(model_txt))
-        print(f"Working with model with constants: {model.signature.constants}")
-        #o1 = add_counter_with_options(check_lines)(axioms, model, options = []) <- this explodes soon
-        # o2 = add_counter_with_options(check_lines)(axioms, model, options = ["equivalence"]) <- this also explodes in this case
-        o3 = add_counter_with_options(check_lines)(axioms, model, options = ["range"])
-        o4 = add_counter_with_options(check_lines)(axioms, model, options = ["equivalence","range"])
-        print("\n",o3,"\n",o4) #print("\n",o1,"\n",o2,"\n",o3,"\n",o4)
 
 
 if __name__ == "__main__":

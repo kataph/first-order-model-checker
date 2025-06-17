@@ -1,3 +1,5 @@
+# this file shows a simplified case of the task carried out by this codebase: here propositional logic formulas, instead of first-order ones, are parsed and evaluated against a model
+
 from lark import Lark
 from lark.visitors import Interpreter
 

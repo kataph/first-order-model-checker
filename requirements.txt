@@ -9,4 +9,4 @@ re
 time
 random
 functools
-logging
+colorama

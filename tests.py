@@ -1,6 +1,5 @@
-from check import P9FreeVariablesExtractor, P9Evaluator, P9Explainer, P9ModelReader, prover9_parser
+from check import P9FreeVariablesExtractor, P9Evaluator, P9ModelReader, prover9_parser
 from basic_formulas_manipulation import treeExplainerRED, treeExplainerReturning, treeExplainerReturningRED
-from model import Model
 from lark import Tree
 
 def test_alternatives(alternative):
@@ -16,21 +15,6 @@ def test_alternatives(alternative):
 
 def tests(options):
         print("Doing some tests...")
-
-        # model_texts_axioms_evals = []
-
-        # model_texts_axioms_evals.append(("""(P(c1,c2,c3,c4) & U(u,v) & Z(v)) # label(model).
-                    # cc = ccc .""","all X all Y U(X,Y).",[False]))
-
-        # model_text = """c1 = c2 .
-        #                 cc = ccc ."""
-        # axiom_text = "(all X all Y ((p(X,Y) & p(Y,X)) -> ((X)=(Y)))) # label(parthood_antysymmetry_Ad6)."
-        # model_texts_axioms_evals.append((model_text, axiom_text, [False]))
-
-        # model_text = """(P(c1,c2,c3,c4) & U(u,v) & Z(v)) # label(model).
-        #                 A(x) ."""
-        # axiom_text = "(exists X exists Y exists Z exists W P(X,Y,Z,W)."
-        # model_texts_axioms_evals.append((model_text, axiom_text, [True]))
 
         model_texts_axioms_evals = [
             ("P(a1,a2).",
@@ -93,28 +77,9 @@ def tests(options):
                 """,
             [True, True, False, True, True, True]),
         ]
-        # model_text = """A(v).B(v).C(x)."""
-        # model_text = """A(x,y).B(y)."""
-        # model_text = """A(y,y).B(y)."""
-        # model_text = """A(x,y).B(y).A(y,x).B(x)."""
-
-
-
-        # axiom_text = "(all X all Y ((p(X,Y) & qqq(Y,X,ZZZ,z)) -> ((X)=(zz)))) # label(parthood_antysymmetry_Ad6)."
-        # axiom_text = "(all X all Y (X = Y)) ."
-        # axiom_text = "(all X all Y (X = y)) ."
-        # axiom_text = "(all X all Y A(X,y)) ."
-        # axiom_text = "(all X all Y exists Z A(X,Y,Z)) ."
-        # axiom_text = "(all X all Y A(X,Y)) . (all Z B(Z)) ."
-        # axiom_text = "all X A(X) <- B(X)."
-        # axiom_text = ""
-        # axiom_text = "exists X C(X)."
-        # axiom_text = ""
-        # axiom_text = "exists X A(X) & B(x)."
 
         p9variables = P9FreeVariablesExtractor()
         p9model = P9ModelReader()
-        p9explainer = P9Explainer()
 
         for model_text, axiom_text, ground_eval in model_texts_axioms_evals:
             print("testing axiom/model---->", axiom_text, model_text)
@@ -172,30 +137,4 @@ def tests(options):
 if __name__ == "__main__":
     tests(options=[])
     # tests(options=["equivalence"])
-    #continuantPartOf(A,B,T)) & (continuantPartOf(B,C,T2)) & (temporalPartOf
-    from tqdm import tqdm as lbar
-    def a1(model: Model, axioms):
-        """|cP|.|cP|"""
-        for abt in lbar(model.ordered_truth_table["continuantPartOf"].keys()):
-            for bct2 in model.ordered_truth_table["continuantPartOf"].keys():
-                if bct2[0] != abt[1]:
-                    continue
-                assert bct2[0] == abt[1]
-                if ((abt[2],bct2[2]) in model.ordered_truth_table["temporalPartOf"].keys() and not (abt[0],bct2[1],abt[2]) in model.ordered_truth_table["continuantPartOf"].keys()):
-                    return False
-        return True
-    def a2(model: Model, axioms):
-        """100^5 = 10^10 = 10 miliardi"""
-        for a in lbar(model.signature.constants):
-            for b in model.signature.constants:
-                for c in model.signature.constants:
-                    for t in model.signature.constants:
-                        for t2 in model.signature.constants:
-                            if ((a,b,t) in model.ordered_truth_table["continuantPartOf"].keys() and 
-                                (b,c,t2) in model.ordered_truth_table["continuantPartOf"].keys() and 
-                                (t,t2) in model.ordered_truth_table["temporalPartOf"].keys() and 
-                                not (a,c,t) in model.ordered_truth_table["continuantPartOf"].keys()):
-                                return False
-        return True
-
-    # test_alternatives(a2)
+    

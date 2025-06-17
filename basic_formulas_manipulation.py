@@ -1,18 +1,17 @@
-import logging
-my_logger = logging.getLogger("my_logger")
-logging.basicConfig(level=logging.INFO)
 import re
 
 from functools import partialmethod
 from typing import Literal, Callable
 
 from lark import Tree, Token, Transformer
-from lark.visitors import Visitor, Interpreter, Discard
+from lark.visitors import Interpreter, Discard
 
-from model import prover9_parser, Signature, Model, P9ModelReader
+from model import prover9_parser, Signature
 
 from PrettyPrint import PrettyPrintTree
 from PrettyPrint.Utils.Orientation import Orientation
+from colorama import Back
+
 
 
 def print_tree(tree: Tree, filename: str):
@@ -51,14 +50,37 @@ BINARY_OPS = [
     "equivalence_entailment_exc",
 ]
 
+def dual_quantifier(string):
+    q_set = {"existential_quantification", "universal_quantification"}
+    if not string in q_set:
+        raise TypeError(f"Dual quantifier got {string}")
+    return q_set.difference({string}).pop()
+
+def dual_op(string):
+    op_map = {
+        "existential_quantification": "universal_quantification",
+        "existential_quantification_exc": "universal_quantification",
+        "universal_quantification": "existential_quantification",
+        "universal_quantification_exc": "existential_quantification",
+        "conjunction": "disjunction",
+        "conjunction_exc": "disjunction",
+        "disjunction": "conjunction",
+        "disjunction_exc": "conjunction",
+        "false": "true",
+        "true": "false",
+    }
+    if not string in op_map.keys():
+        raise TypeError(
+            f"Operation should not be called to get dual. Operation was {string}"
+        )
+    return op_map[string]
+
 
 def getChildren(x):
     return x.children if hasattr(x, "children") else None
 
-
 def getData(x):
     return x.data if hasattr(x, "data") else str(x)
-
 
 def getExplanation(x):
     if hasattr(x, "explanation"):
@@ -68,10 +90,6 @@ def getExplanation(x):
     if hasattr(x, "data"):
         return x.data
     return str(x)
-    # return (f"{x.data} is {x.explanation}" if hasattr(x, "explanation") else (x.data if hasattr(x,"data") else str(x)))
-
-
-from colorama import Back
 
 treeExplainer = PrettyPrintTree(getChildren, getExplanation, color="", orientation=Orientation.Vertical)
 treeExplainerRED = PrettyPrintTree(getChildren, getExplanation, color=Back.RED, orientation=Orientation.Vertical)
@@ -89,43 +107,6 @@ treeExplainerReturningRED = PrettyPrintTree(
 treeExplainerReturningGREEN = PrettyPrintTree(
     getChildren, getExplanation, return_instead_of_print=True, color=Back.GREEN
 )
-
-text0 = (
-    "(all X (cat(X) <-> (ed(X) & (exists T pre(X,T)) & all T (pre(X,T) -> tat(X,T)))))."
-)
-# text = '(all X (cat(X) <-> (ed(X) & (exists T1 (pre(X,T1))) & all T (pre(X,T) -> tat(X,T))))).'
-# text = '(A(c) & B(y)).'
-# text = '(P(c1,c2) & Q(x) & T(v)) .'
-# text = '''(P(c1,c2) & Q(x) & T(v)) .
-# Q(c)    . '''
-# text = '''(P(c1,c2) & Q(x) & T(v)) .
-#             True    .
-#             (P(c, c4) & True)    .
-#             False    . '''
-# text = 'all X A(X,Y) .'
-text6 = "all X A(X,Y,c2) ."
-text4 = "all X A(X,Y) & exists Z P(Z) ."
-text5 = "all X A(X,Y,c2) & P(X,Z,c) ."
-text2 = "all X A(X,Y,c2) | - exists Z P(X,Z,c) ."
-text2pre = "all X all Z A(X,Y,c2) | - P(X,Z,c) ."
-text1 = "all X all Y all Z all T all T2 A(X,Y,T) & A(Y,Z,T2) & B(T,T2) -> A(X,Z,T) ."
-text7 = "all A all B all C all T all T2  ((((properContinuantPartOf(A,B,T)) & (properContinuantPartOf(B,C,T2)) & (temporalPartOf(T,T2)))) -> (properContinuantPartOf(A,C,T))) # label(\"proper-continuant-part-of-transitive-at-a-time\")."
-text7 = "all A (B(A)) # label(\"proper-continuant-part-of-transitive-at-a-time\")."
-text7 = "all P all Q all R  ((((existsAt(P,Q)) & (continuantPartOf(R,P,Q)))) -> (existsAt(R,Q)))."
-text7 = "all P all Q all R  ((((eXistsAt(P,Q)) & (continuantPartOf(R,P,Q)))) -> (eXistsAt(R,Q)))."
-text3 = "all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l)."
-text3 = "all X all Y ((X) = (Y))."
-text3 = "all X all Y X = Y."
-
-
-
-
-# ast = prover9_parser.parse(text3)
-# treeExplainer(ast)
-# ast = prover9_parser.parse(text7)
-# treeExplainer(ast)
-# # treeExplainer(RemoveLines().transform(ast))
-# exit()
 
 
 
@@ -230,10 +211,6 @@ class P9FreeVariablesExtractor(Transformer):
         super().__init__(visit_tokens)
         self.axioms_signature = Signature()
         
-    # def transform(self, tree):
-    #     # print(f"gonna transform {tree}{treeExplainerGREEN(tree)}")
-    #     return super().transform(tree)
-
     def extract_free_variables_and_signature(
         self, tree: Tree
     ) -> tuple[set[str], Signature]:
@@ -266,13 +243,9 @@ class P9FreeVariablesExtractor(Transformer):
         variable_set: set[str] = set()
         for token in term_list:
             if not isinstance(token, Token):
-                # Now this can happen when using polarity...
-                if isinstance(token, dict) and "polarity" in token.keys():
-                    pass  # it's ok, do nothing
-                else:  # unrecognized case
-                    raise AssertionError(
-                        f"Found non-token {token} in predicate {predicate_symbol} (and the non-token is not auxillary data about polarity). This should not happen"
-                    )
+                raise AssertionError(
+                    f"Found non-token {token} in predicate {predicate_symbol}. This should not happen"
+                )
             else:
                 if token.type == "CONSTANT":
                     self.axioms_signature.add_constant(token)
@@ -306,13 +279,12 @@ class P9FreeVariablesExtractor(Transformer):
     def empty(self, items):
         return set()
     def cond(self, items):
-        return set() # check if correct TODO
+        return set()
 
     def dom(self, items):
         ranged_variable = items[0]
         return {str(ranged_variable)}
 
-    # merge_variables = lambda self, items: set().union(*(var_set for var_set in items))
     def merge_variables(self, items):
         return set().union(*(var_set for var_set in items))
 
@@ -395,24 +367,6 @@ class AssociativeFlattener(Transformer):
         quantification, op="existential_quantification"
     )
 
-
-# axiom_text = """exists Y exists Z all X all U all UU exists T exists TT ((A(X) | -U(X) | K(X,Z)) & (B(X,Y) | -V(X,Y,Z)) & (C(Z)))."""
-# axiomAST = prover9_parser.parse(axiom_text)
-# flattener = AssociativeFlattener()
-# flatAst = flattener.transform_repeatedly(axiomAST)
-# treeExplainer(axiomAST)
-# treeExplainer(flatAst)
-# quit()
-def test_free_variables_extraction():
-    extractor = P9FreeVariablesExtractor()
-    axiom_to_free_vars = [("(all Y p(X,Y)).", {"X"}),
-                          ("(all Z all W l(X,Y,Z,W)).", {"X", "Y"})]
-    for axiom, free_vars in axiom_to_free_vars:
-        ast = prover9_parser.parse(axiom)
-        assert free_vars == (actual:=extractor.transform(ast)), f"expected {free_vars}, got {actual}"
-        assert free_vars == (actual:=extractor.transform(AssociativeFlattener().transform_repeatedly(ast))), f"expected {free_vars}, got {actual}"
-    print("All good with free vars extraction")
-
 class ReverseAssociativeFlattener(Transformer):
     """Inverts the operations of the associative flattener"""
 
@@ -437,7 +391,6 @@ class ReverseAssociativeFlattener(Transformer):
 
     def quantification(self, items, op: str):
         *variables, inner_formula = items
-        #variables = sorted(variables) <- changes previous results too much
         if len(variables) > 1:
             return Tree(op, [variables[0], Tree(op, variables[1:] + [inner_formula])])
             
@@ -450,121 +403,6 @@ class ReverseAssociativeFlattener(Transformer):
         quantification, op="existential_quantification"
     )
 
-
-# axiom_text = """exists Y exists Z all X all U all UU exists T exists TT ((A(X) | -U(X) | K(X,Z)) & (B(X,Y) | -V(X,Y,Z)) & (C(Z)))."""
-# axiomAST = prover9_parser.parse(axiom_text)
-# flatAst = AssociativeFlattener().transform_repeatedly(axiomAST)
-# reverseflatAst = ReverseAssociativeFlattener().transform_repeatedly(axiomAST)
-# treeExplainer(axiomAST)
-# treeExplainer(flatAst)
-# treeExplainer(reverseflatAst)
-# assert reverseflatAst == axiomAST
-# quit()
-
-
-class TypeChecker(Interpreter):
-    def __init__(self):
-        self.axioms_signature = Signature()
-        self.isUniversalRule = "maybe"
-
-    # def equality_atom(self, items):
-    #     return True
-    # def predicate(self, items):
-    #     return True
-    def isUniversal(self, tree: Tree):
-        self.isUniversalRule = True
-        self.visit(tree)
-        out = self.isUniversalRule
-        self.isUniversalRule = "maybe"
-        return out
-
-    def conjunction(self, tree):
-        left, right = tree.children
-        if not (
-            left.data in ["conjunction", "predicate", "equality_atom"]
-            and right.data in ["conjunction", "predicate", "equality_atom"]
-        ):
-            print(f"auch at {tree.data}")
-            self.isUniversalRule = False
-        self.visit_children(tree)
-
-    def universal_quantification(self, tree):
-        variable, quantified_formula = tree.children
-        if not (
-            quantified_formula.data
-            in [
-                "entailment",
-                "conjunction",
-                "predicate",
-                "equality_atom",
-                "universal_quantification",
-            ]
-        ):
-            print(f"auch at {tree.data}")
-            self.isUniversalRule = False
-        self.visit_children(tree)
-
-    def must_not_appear(self, tree):
-        print(f"auch at {tree.data}")
-        self.isUniversalRule = False
-
-    existential_quantification = must_not_appear
-
-    disjunction = must_not_appear
-    conjunction_exc = must_not_appear
-    disjunction_exc = must_not_appear
-    reverse_entailment = must_not_appear
-    equivalence_entailment = must_not_appear
-    entailment_exc = must_not_appear
-    reverse_entailment_exc = must_not_appear
-    equivalence_entailment_exc = must_not_appear
-    negation = must_not_appear
-    negation_exc = must_not_appear
-
-    # car = lambda self, tree: tree.children[0]
-    # start = car
-    # lines = car
-    # line = car
-    # sentence = car
-    # label = lambda self, items: None
-
-
-# tc = TypeChecker()
-# treeExplainer(ast1)
-# print(tc.isUniversalRule)
-# print(tc.isUniversal(ast1))
-# print(tc.isUniversalRule)
-# print(tc.isUniversal(ast2))
-# print(tc.isUniversal(ast3))
-# print(tc.isUniversal(ast4))
-# print(tc.isUniversal(ast5))
-
-
-def dual_quantifier(string):
-    q_set = {"existential_quantification", "universal_quantification"}
-    if not string in q_set:
-        raise TypeError(f"Dual quantifier got {string}")
-    return q_set.difference({string}).pop()
-
-
-def dual_op(string):
-    op_map = {
-        "existential_quantification": "universal_quantification",
-        "existential_quantification_exc": "universal_quantification",
-        "universal_quantification": "existential_quantification",
-        "universal_quantification_exc": "existential_quantification",
-        "conjunction": "disjunction",
-        "conjunction_exc": "disjunction",
-        "disjunction": "conjunction",
-        "disjunction_exc": "conjunction",
-        "false": "true",
-        "true": "false",
-    }
-    if not string in op_map.keys():
-        raise TypeError(
-            f"Operation should not be called to get dual. Operation was {string}"
-        )
-    return op_map[string]
 
 def pushdown_negation_interpreter(interpreter, tree):
     negated_formula = tree.children[0]
@@ -583,7 +421,6 @@ def pushdown_negation_interpreter(interpreter, tree):
     if negated_formula.data in ["true", "false"]:
         return Tree(dual_op(negated_formula.data), [])
     return Tree("negation", interpreter.visit_children(tree))
-
 
 def pushdown_negation_transformer(transformer, children):
     negated_formula = children[0]
@@ -771,14 +608,6 @@ class ReplaceVariable(Interpreter):
 
     universal_quantification = existential_quantification_bounded = existential_quantification = existential_quantification_bounded = quantification
 
-# rp = ReplaceVariable("X", "X1")
-# # treeExplainer(rp.transform(ast1))
-# treeExplainer(rp.transform(prover9_parser.parse("(A(X,Y,Z) | U(X,C)).")))
-# treeExplainer(rp.transform(prover9_parser.parse("(all X A(X)).")))
-# treeExplainerRED(rp.visit(prover9_parser.parse("((all X A(X)) & B(X)).")))
-# treeExplainerRED(ReplaceVariable("X","X1",False).visit(prover9_parser.parse("((all X A(X)) & B(X)).")))
-# exit()
-
 class ToUniqueVariables(Transformer):
     """Each quantified variable will have a unique name. Also redundant quantifications will be removed. Not to be used with flattened formulas!"""
 
@@ -823,11 +652,7 @@ class ToUniqueVariables(Transformer):
             rp = ReplaceVariable(str(quantified_variable), new_name)
             replacing_inner_formula = rp.transform(inner_formula)
             if bounding_formula_list != []:
-                # treeExplainerYELLOW(bounding_formula_list[0])
-                # print(self.quantified_variables)
-                # print(str(quantified_variable),"--->",new_name)
                 bounding_formula_list = [rp.transform(bounding_formula_list[0])]
-                # treeExplainerYELLOW(bounding_formula_list[0])
             return Tree(
                 quantification_type,
                 [Token(type_="VARIABLE", value=new_name)]
@@ -850,27 +675,6 @@ class ToUniqueVariables(Transformer):
         quantification, quantification_type="existential_quantification_bounded"
     )
 
-
-def test_variables_adjuster():
-    unique = ToUniqueVariables()
-    toString = ToString()
-    in_outs = [("((all X A(X,Y)) & (exists X P(X)) & (exists X V(X))).", "((all X A(X,Y)) & (exists X1 P(X1)) & (exists X2 V(X2)))."),
-               ("((all X A(X,Y)) & (exists X P(X)) & (exists X (V(X) & all X B(X)))).", "((all X A(X,Y)) & (exists X1 P(X1)) & (exists X3 (V(X3) & all X2 B(X2))))."),
-               ("all A all B all C all T all T2  ((((properContinuantPartOf(A,B,T)) & (properContinuantPartOf(B,C,T2)) & (temporalPartOf(T,T2)))) -> (properContinuantPartOf(A,C,T))) # label(\"proper-continuant-part-of-transitive-at-a-time\").", 
-                "all A all B all C all T all T2  ((((properContinuantPartOf(A,B,T)) & (properContinuantPartOf(B,C,T2)) & (temporalPartOf(T,T2)))) -> (properContinuantPartOf(A,C,T))) # label(\"proper-continuant-part-of-transitive-at-a-time\")."),
-                ("all P all C1 all C2  ((((occursIn(P,C1)) & (all T  ((eXistsAt(P,T)) <-> (locatedIn(C1,C2,T)))))) -> (occursIn(P,C2))).","all P all C1 all C2  ((((occursIn(P,C1)) & (all T  ((eXistsAt(P,T)) <-> (locatedIn(C1,C2,T)))))) -> (occursIn(P,C2)))."),
-                ("all C1 (all C1 Atom(C1)) & (all C2 exists T locatedIn(C1,C2,T)).", "all C3 (all C1 Atom(C1)) & (all C2 exists T locatedIn(C3,C2,T))."),
-                ("((all C2 exists C1 locatedTopOf(C1,C2,T)) & (all C2 exists C1 locatedIn(C1,C2,T))).", "((all C2 exists C1 locatedTopOf(C1,C2,T)) & (all C4 exists C3 locatedIn(C3,C4,T)))."),
-                ("((all C20 exists C1 locatedTopOf(C1,C20,T)) & (all C2 exists C1 locatedIn(C1,C2,T))).", "((all C20 exists C1 locatedTopOf(C1,C20,T)) & (all C2 exists C3 locatedIn(C3,C2,T)))."),
-               ]
-    for inp, out in in_outs:
-        base = prover9_parser.parse(inp)
-        calc = unique.adjust_variables(base)
-        ground = prover9_parser.parse(out)
-        assert calc == ground, f"From black/white and string should have got green, got read instead {base, treeExplainer(base), treeExplainerGREEN(ground), treeExplainerRED(calc)}"
-    print("All good for variables adjuster")
-#test_variables_adjuster();exit()
-
 class VariableNormalizer(Interpreter):
     """Each variable in the formula will be unique and will be renamed in a deterministic way. Not to be used with flattened formulas!"""
 
@@ -888,30 +692,6 @@ class VariableNormalizer(Interpreter):
             rp = ReplaceVariable(str(variable), f"_X{i}", False)
             tree = rp(tree)
         return tree
-
-    
-
-def test_variable_normalization():
-    test_true = [
-        ("(all X A(X)).","(all B A(B))."),
-        ("(all X exists Y A(X,Y)).","(all B exists Z A(B,Z))."),
-    ]
-    test_false = [
-        ("(all X A(X)).","(all B C(B))."),
-        ("(all X exists Y A(X,Y)).","(exists B exists Z A(B,Z))."),
-    ]
-    vn = VariableNormalizer()
-    for left, right in test_true:
-        left_ast = prover9_parser.parse(left)
-        right_ast = prover9_parser.parse(right)
-        assert vn(left_ast) == vn(right_ast), (treeExplainer(left_ast),treeExplainerGREEN(vn(left_ast)),treeExplainerRED(vn(right_ast)))
-    for left, right in test_false:
-        left_ast = prover9_parser.parse(left)
-        right_ast = prover9_parser.parse(right)
-        assert not vn(left_ast) == vn(right_ast)
-    print("All good for variable normalization")
-
-# test_variable_normalization();exit()
 
 
 class ToPrenex(Transformer):
@@ -1104,7 +884,6 @@ class ToPrenex(Transformer):
             "conjunction",
             [Tree("entailment", [left, right]), Tree("entailment", [right, left])],
         )
-        # return self.conjunction([self.entailment([left, right]), self.entailment([right, left])])
 
     equivalence_entailment_exc = equivalence_entailment
 
@@ -1123,14 +902,6 @@ class ToPrenex(Transformer):
 
     negation = negation_exc
 
-    # do_nothing = lambda self, items: items
-    # car = lambda self, items: items[0]
-    # start = car
-    # lines = car
-    # line = car
-    # sentence = car
-
-    # label = lambda self, items: None
 class ToNNF(Transformer):
     """Transform a formula in negation normal form"""
 
@@ -1149,45 +920,6 @@ class ToNNF(Transformer):
         return newtree
 
     negation = negation_exc = pushdown_negation_transformer_general
-
-def test_NNF():
-    tests = [
-        ("(-(all A all B A(A) & B(B))).", "(exists A (exists B (-A(A) | -B(B)))).")
-    ]
-    base_test(tests, lambda inp: ToString().visit(ToNNF().adjust_transform_repeatedly(prover9_parser.parse(inp))), name = "NNF")
-    
-# test_NNF()
-# exit()
-# tp=ToPrenex()
-# textp = 'all X (exists Y R(X,Y)) & (exists Z P(X,Z)).'
-# textp = '((all X (exists Y R(X,Y))) & (all X(exists Z P(X,Z)))).'
-# textp = '((exists X (all Y R(X,Y))) | (exists X (all Z P(X,Z)))).'
-# textp = '((all X (exists Y R(X,Y))) | (all X(exists Z P(X,Z)))).'
-# textp = 'all A all B  ((((exists T  (((instanceOf(A,objectAggregate,T)) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) & (all T  ((continuantPartOf(A,B,T)) <-> (continuantPartOf(B,A,T)))))) -> ((A) = (B))).'
-# astp=prover9_parser.parse(textp)
-# treeExplainer(astp)
-# treeExplainer(tp.adjust_transform_repeatedly(astp))
-# quit()
-
-# treeExplainer(ast0)
-# ast00 = tp.adjust_transform_repeatedly(ast0)
-# treeExplainer(ast00)
-# treeExplainer(ast1)
-# ast11 = tp.adjust_transform_repeatedly(ast1)
-# treeExplainer(ast11)
-# treeExplainer(ast2)
-# ast22 = tp.adjust_transform_repeatedly(ast2)
-# treeExplainer(ast22)
-# treeExplainer(ast3)
-# ast33 = tp.adjust_transform_repeatedly(ast3)
-# treeExplainer(ast33)
-# treeExplainer(ast4)
-# ast44 = tp.transform(ast4)
-# treeExplainer(ast44)
-# treeExplainer(ast5)
-# ast55 = tp.transform(ast5)
-# treeExplainer(ast55)
-# s()
 
 
 class InterpreterUntilFixedPoint(Interpreter):
@@ -1264,26 +996,6 @@ class ReduceLogicalSignature(InterpreterUntilFixedPoint):
         return Tree(tree.data, self.visit_children(tree))
     
 def pushdown_binary_op(self, tree, param: Literal["conjunction", "disjunction"]):
-    # left, right = tree.children
-    # if right.data == param:
-    #     sub_left, sub_right = right.children
-    #     return Tree(
-    #             param,
-    #             [
-    #                 Tree(dual_op(param), [self.visit(left), self.visit(sub_left)]),
-    #                 Tree(dual_op(param), [self.visit(left), self.visit(sub_right)]),
-    #             ],
-    #         )
-    # if left.data == param:
-    #     sub_left, sub_right = left.children
-    #     return Tree(
-    #             param,
-    #             [
-    #                 Tree(dual_op(param), [self.visit(sub_left), self.visit(right)]),
-    #                 Tree(dual_op(param), [self.visit(sub_right), self.visit(right)]),
-    #             ],
-    #         )
-    
     # First thing first: duplicates and base cases are removed
     absorbing_element = {"disjunction": "true", "conjunction": "false"}
     neutral_element = {"disjunction": "false", "conjunction": "true"}
@@ -1308,8 +1020,6 @@ def pushdown_binary_op(self, tree, param: Literal["conjunction", "disjunction"])
         )
     return Tree(param, self.visit_children(tree))
 
-
-
 class ToNegativeNormalForm(ReduceLogicalSignature):
     """Transform a propositional formula in negative normal form. (Non propositional operators are included)"""
     negation = negation_exc = pushdown_negation_interpreter_general
@@ -1329,55 +1039,6 @@ class ToConjunctiveNormalForm(ToNegativeNormalForm):
         super().__init__(pretransform_function=self.toNNF)
     
     disjunction_exc = disjunction = partialmethod(pushdown_binary_op, param = "disjunction")
-
-
-def test_reduce_logical_signature():
-    tests = [
-        ("(A(X) -> B(X)).", "(-A(X) | B(X))."),
-        ("(A(X) <-> B(X)).", "((-A(X) | B(X)) & (-B(X) | A(X)))."),
-        ("(A(X) & A(X)).", "(A(X))."),
-        ("(A(X) & A(X) & A(X)).", "(A(X))."),
-    ]
-    base_test(tests, lambda inp: ToString()(ReduceLogicalSignature()(prover9_parser.parse(inp))), "reduce logical signature")
-
-def test_toNNF():
-    tests = [
-        ("((A(X) & A(X)) | C(X)).", "(A(X) | C(X))."),
-        ("((A(X) & B(X)) | C(X)).", "((A(X) & B(X)) | C(X))."),
-        ("(-((A(X) & B(X)) | exists X C(X))).", "((-A(X) | -B(X)) & (all X (-C(X))))."),
-        ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).", "(all X (all T (-instanceOf(X,fiatLine,T) | (exists S (exists TP ((temporalPartOf(TP,T) & occupiesSpatialRegion(X,S,TP)) & instanceOf(S,oneDimensionalSpatialRegion,TP)))))))."),
-    ]
-    func = lambda inp: ToString()(ToNegativeNormalForm()(prover9_parser.parse(inp)))
-    name = "toCNF"
-    base_test(tests, func, name)
-
-def test_toCNF():
-    tests = [
-        ("((A(X) & A(X)) | C(X)).", "(A(X) | C(X))."),
-        ("((A(X) & B(X)) | C(X)).", "((A(X) | C(X)) & (B(X) | C(X)))."),
-        ("((A(X) & B(X)) | exists X C(X)).", "((A(X) | (exists X (C(X)))) & (B(X) | (exists X (C(X)))))."),
-        ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).", "(all X (all T (-instanceOf(X,fiatLine,T) | (exists S (exists TP ((temporalPartOf(TP,T) & occupiesSpatialRegion(X,S,TP)) & instanceOf(S,oneDimensionalSpatialRegion,TP)))))))."),
-    ]
-    func = lambda inp: ToString()(ToConjunctiveNormalForm()(prover9_parser.parse(inp)))
-    name = "toCNF"
-    base_test(tests, func, name)
-
-def test_toDNF():
-    tests = [
-        ("((A(X) | B(X)) & C(X)).", "((A(X) & C(X)) | (B(X) & C(X)))."),
-        ("((A(X) | B(X)) & (C(X) | D(X))).", "(((A(X) & C(X)) | (A(X) & D(X))) | ((B(X) & C(X)) | (B(X) & D(X))))."),
-        ("((A(X) | B(X)) & (C(X) | True)).", "(A(X) | B(X))."),
-        ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).", "(all X (all T (-instanceOf(X,fiatLine,T) | (exists S (exists TP ((temporalPartOf(TP,T) & occupiesSpatialRegion(X,S,TP)) & instanceOf(S,oneDimensionalSpatialRegion,TP)))))))."),
-    ]
-    func = lambda inp: ToString()(ToDisjunctiveNormalForm()(prover9_parser.parse(inp)))
-    name = "toDNF"
-    base_test(tests, func, name)
-     
-# test_reduce_logical_signature()
-# test_toNNF()
-# test_toCNF()
-# test_toDNF()
-# exit()
 
 class ToPrenexCNF:
     """Transform a formula in prenex conjunctive normal form."""
@@ -1440,41 +1101,9 @@ class ToPrenexNNF:
         return newtree
 
 
-def test_toPDNF():
-    tests = [
-        ("((A(X) | B(X)) & C(X)).", "((A(X) & C(X)) | (B(X) & C(X)))."),
-        ("((A(X) | B(X)) & (C(X) | D(X))).", "(((A(X) & C(X)) | (A(X) & D(X))) | ((B(X) & C(X)) | (B(X) & D(X))))."),
-        ("((A(X) | B(X)) & (C(X) | True)).", "(A(X) | B(X))."),
-        ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).", "(all X (all T (exists S (exists TP (-instanceOf(X,fiatLine,T) | ((temporalPartOf(TP,T) & occupiesSpatialRegion(X,S,TP)) & instanceOf(S,oneDimensionalSpatialRegion,TP)))))))."),
-        ("all I all START all END  ((((instanceOf(I,temporalInterval,I)) & (hasFirstInstant(I,START)) & (hasLastInstant(I,END)))) -> (-(exists GAP exists GAPSTART exists GAPEND  (((-(instanceOf(GAP,temporalInstant,GAP))) & (hasFirstInstant(GAP,GAPSTART)) & (hasLastInstant(GAP,GAPEND)) & (((precedes(GAPEND,END)) | (((temporalPartOf(END,I)) & ((GAPEND) = (END)))))) & (((precedes(START,GAPSTART)) | (((temporalPartOf(START,I)) & ((GAPSTART) = (START)))))) & (-(temporalPartOf(GAP,I)))))))).","(all I (all START (all END (all GAP (all GAPSTART (all GAPEND (((-instanceOf(I,temporalInterval,I) | -hasFirstInstant(I,START)) | -hasLastInstant(I,END)) | (((((instanceOf(GAP,temporalInstant,GAP) | -hasFirstInstant(GAP,GAPSTART)) | -hasLastInstant(GAP,GAPEND)) | ((-precedes(GAPEND,END) & -temporalPartOf(END,I)) | (-precedes(GAPEND,END) & -GAPEND = END))) | ((-precedes(START,GAPSTART) & -temporalPartOf(START,I)) | (-precedes(START,GAPSTART) & -GAPSTART = START))) | temporalPartOf(GAP,I)))))))))."),
-    ]
-    func = lambda inp: ToString()(ToPrenexDNF()(prover9_parser.parse(inp)))
-    name = "toPDNF"
-    base_test(tests, func, name)
-
-# test_toPDNF()
-# exit()
-# toCNF = ToConjunctiveNormalForm()
-# toPCNF = ToPrenexCNF()
-# text = "(P(x,y) & Q(a,b) & C(z) -> R(a))."
-# text = "((P(x,y) & Q(a,b)) | (C(z) & R(a)))."
-# text = "((P(x,y) & Q(a,b)) | (C(z)) )."
-# text = "(- (((P(x,y) & -Q(a,b)) | (C(z)))) )."
-# text = "((P(x,y) & Q(a,b)) | (C(z) <-> R(a)))."
-# text = "(all X p(X) & - (exists Y (q(X,Y))))."
-# text = "(all X p(X) & - (exists Y (q(X,Y))))."
-# text = '(all X all Y all Z all T all T2 A(X,Y,T) & A(Y,Z,T2) & B(T,T2) -> A(X,Z,T)).'
-# text = '(all X all Y all Z all T (A(X,Y,T) & (exists T2 (A(Y,Z,T2) & B(T,T2))) -> A(X,Z,T))).'
-# ast = prover9_parser.parse(text)
-# treeExplainer(ast)
-# cnfTree = toCNF.visit_repeatedly(ast)
-# pcnfTree = toPCNF.transform_repeatedly(ast)
-# treeExplainer(cnfTree)
-# treeExplainer(pcnfTree)
-# quit()
-
-
 class ToReversePrenex(Transformer):
+    """Transforms a formula in reverse prenex (push quantifiers in the innermost position possible -- if it is immediate to do so)"""
+
 
     def __init__(self, visit_tokens=True):
         super().__init__(visit_tokens)
@@ -1557,8 +1186,8 @@ class ToReversePrenexCNF(ToReversePrenex):
     def adjust_transform_repeatedly(self, tree):
         # ensures the tree is PCNF
         PCNFtree = self.toPCNF.transform_repeatedly(tree) 
-        if PCNFtree != tree:
-            my_logger.debug(f"As an input of ToReversePrenexCNF I got a formula not in PCNF. Precisely {self.stringer.visit(tree)}. I have transformed it in PCNF: the formula is now {self.stringer.visit(PCNFtree)}.")
+        # if PCNFtree != tree:
+            # print(f"As an input of ToReversePrenexCNF I got a formula not in PCNF. Precisely {self.stringer.visit(tree)}. I have transformed it in PCNF: the formula is now {self.stringer.visit(PCNFtree)}.")
 
         adjusted_tree = self.unique.adjust_variables(PCNFtree)
         oldtree = adjusted_tree
@@ -1580,8 +1209,8 @@ class ToReversePrenexNNF(ToReversePrenex):
     def adjust_transform_repeatedly(self, tree):
         # ensures the tree is PNNF
         PNNFtree = self.toPNNF.transform_repeatedly(tree) 
-        if PNNFtree != tree:
-            my_logger.debug(f"As an input of ToReversePrenexNNF I got a formula not in PNNF. Precisely {self.stringer.visit(tree)}. I have transformed it in PCNF: the formula is now {self.stringer.visit(PNNFtree)}.")
+        # if PNNFtree != tree:
+        #     my_logger.debug(f"As an input of ToReversePrenexNNF I got a formula not in PNNF. Precisely {self.stringer.visit(tree)}. I have transformed it in PCNF: the formula is now {self.stringer.visit(PNNFtree)}.")
 
         adjusted_tree = self.unique.adjust_variables(PNNFtree)
         oldtree = adjusted_tree
@@ -1591,29 +1220,6 @@ class ToReversePrenexNNF(ToReversePrenex):
             oldtree = newtree
             newtree = self.unique.adjust_variables(self.transform(oldtree))
         return newtree
-
-    
-
-
-
-# textp = '(all X -( A(X) | False)).'
-# textp = 'all X (exists Y R(X,Y)) & (exists Z P(X,Z)).'
-# textp = '((all X (exists Y R(X,Y))) & (all X(exists Z P(X,Z)))).'
-# textp = '((exists X (all Y R(X,Y))) | (exists X (all Z P(X,Z)))).'
-# textp = '((all X (exists Y R(X,Y))) | (all X(exists Z P(X,Z)))).'
-# textp = '(all X exists Y (R(X,Y) | P(X,Z))).'
-# textp = '(exists X - all Y (R(X,Y) |  P(X,Z))).'
-# textp = '(all X all Y (R(X,Y) | P(Y))).'
-# textp = "(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T))."
-# textp = "all X (((A(X) | B(X)) & C(X)) | D(X))."
-# textp = "all X (((A(X) & B(X)) | C(X)) & D(X))."
-# astp=prover9_parser.parse(textp)
-# treeExplainerGREEN(astp)
-# print(astp)
-# # treeExplainer(ToPrenex().adjust_transform_repeatedly(astp))
-# tp=ToReversePrenexCNF()
-# treeExplainerRED(tp.adjust_transform_repeatedly(astp))
-# exit()
 
 def remove_double_negation(self, children):
     negated_formula = children[0]
@@ -1646,13 +1252,9 @@ class ToMiniscoped(Transformer):
         # ensures the tree is associatively-flattened
         FlatUniqueVarsTree = self.flattener.transform_repeatedly(UniqueVarsTree)
         oldtree = FlatUniqueVarsTree
-        # newtree = self.unique.adjust_variables(self.transform(oldtree))
-        # newtree = self.transform(oldtree)
         newtree = self.flattener.transform_repeatedly(self.transform(oldtree))
         while newtree != oldtree:
             oldtree = newtree
-            # newtree = self.unique.adjust_variables(self.transform(oldtree))
-            # newtree = self.transform(oldtree)
             newtree = self.flattener.transform_repeatedly(self.transform(oldtree))
         return self.unique.adjust_variables(self.reverse_flattener.transform_repeatedly(newtree))
 
@@ -1790,25 +1392,29 @@ class ToMiniscopedPNNF(ToMiniscoped):
         self.toPNNF = ToPrenexNNF()
         self.preliminary_transform = self.toPNNF.transform_repeatedly
 
-
-
 class ToMiniscopedDNF(ToMiniscopedPCNF):
+    """Transform a formula in DNF and transforms it in miniscoped negation normal form (push quantifiers in the innermost position possible) 
+    If the formula is not DNF it will be made so before starting"""
     def __init__(self, visit_tokens=True):
         super().__init__(visit_tokens)
         self.toDNF = ToDisjunctiveNormalForm()
         self.preliminary_transform = self.toDNF.visit_repeatedly
+
 class ToMiniscopedCNF(ToMiniscoped):
+    """Transform a formula in CNF and transforms it in miniscoped negation normal form (push quantifiers in the innermost position possible) 
+    If the formula is not CNF it will be made so before starting"""
     def __init__(self, visit_tokens=True):
         super().__init__(visit_tokens)
         self.toCNF = ToConjunctiveNormalForm()
         self.preliminary_transform = self.toCNF.visit_repeatedly
+
 class ToMiniscopedNNF(ToMiniscopedPCNF):
+    """Transform a formula in NNF and transforms it in miniscoped negation normal form (push quantifiers in the innermost position possible) 
+    If the formula is not NNF it will be made so before starting"""
     def __init__(self, visit_tokens=True):
         super().__init__(visit_tokens)
         self.toNNF = ToNNF()
         self.preliminary_transform = self.toNNF.adjust_transform_repeatedly
-
-
 
 class BinaryOpSimplificator(InterpreterUntilFixedPoint):
     """Simplifies binary operations expressions, with some sort of look-ahead. E.g. ((A&B)&C)&A will become (A&B)&C and (A|B|C)&B will become B. Also (exists A B(A))&(exists C B(C)) will become (exists A B(A))"""
@@ -1871,127 +1477,6 @@ class BinaryOpSimplificator(InterpreterUntilFixedPoint):
     # false = terminate
     # true = terminate
 
-def test_simplification():
-    tests = [
-        ("(all X (A(X)&A(X))).","(all X A(X))."),
-        ("(all X (B(X)|B(X)|B(X))).","(all X B(X))."),
-        ("(all X (B(X)|C(X)|B(X))).","(all X B(X)|C(X))."),
-        ("(all X ((A(X)|B(X)|C(X))&D(X))&B(X)).","(all X D(X) & B(X))."),
-        ("(all X (A(X) | B(X) | C(X)) & B(X) & (A(X) | B(X) | C(X))).","(all X B(X))."),
-        ("(all X (A(X) | B(X) | C(X)) & D(X) & (A(X) | B(X) | C(X))).","(all X (A(X) | B(X) | C(X)) & D(X))."),
-        ("(all X (A(X) | B(X) | C(X))).","(all X (A(X) | B(X) | C(X)))."),
-        ("(all X --A(X)).","(all X A(X))."),
-        ("((all A B(A))&(all C B(C))).","(all A B(A))."),
-        ("((((all A B(A))&(all C B(C))))|(all Z B(Z))).","(all Z B(Z))."),
-    ]
-    test_with_parsing(tests=tests, func=BinaryOpSimplificator().visit_repeatedly, name="simplification")
-# test_simplification(); exit()
-    
-
-# print_tree((ToDisjunctiveNormalForm().visit_repeatedly(prover9_parser.parse("((a1(X)|a2(X))&(b1(X)|b2(X))&(c1(X)|c2(X)))."))), "delete.txt")
-# print_tree(AssociativeFlattener().transform_repeatedly(ToDisjunctiveNormalForm().visit_repeatedly(prover9_parser.parse("((a1(X)|a2(X))&(b1(X)|b2(X))&(c1(X)|c2(X)))."))), "delete2.txt")
-# exit()
-
-def test_miniscoping():    
-    tp=ToMiniscopedPCNF()
-    textp = 'all X (exists Y R(X,Y)) & (exists Z P(X,Z)).'
-    textp = '((all X (exists Y R(X,Y))) & (all X(exists Z P(X,Z)))).'
-    textp = '((exists X (all Y R(X,Y))) | (exists X (all Z P(X,Z)))).'
-    textp = '((all X (exists Y R(X,Y))) | (all X(exists Z P(X,Z)))).'
-    textp = '(all X exists Y (R(X,Y) | P(X,Z))).'
-    textp = '(exists X - all Y (R(X,Y) |  P(X,Z))).'
-
-    tests = [
-            ("(all X all Y all Z all T all TAU cP(X,Y,T) & cP(Y,Z,TAU) & tP(T,TAU) -> cP(X,Z,T)).","(all Y (all Z (all T ((all TAU ((-(cP(Y,Z,TAU))) | (-(tP(T,TAU))))) | (all X ((-(cP(X,Y,T))) | cP(X,Z,T)))))))."),
-            ("(all X all Y (C(Y) & (A(X) | B(X,Y)))).","((all Y (C(Y))) & (all X (A(X) | (all Y1 (B(X,Y1))))))."),
-            ("(all X all Y A(X) & B(X,Y)).","((all X (A(X))) & (all X1 (all Y (B(X1,Y)))))."),
-            ("(all X all Y (A(X) | B(X,Y))).","(all X (A(X) | (all Y (B(X,Y)))))."),
-            ("(all Y (C(Y) | (A(X) | B(X,Y)))).","(A(X) | (all Y (C(Y) | B(X,Y))))."),
-            ("(all X -( A(X) | False)).","(-(exists X A(X)))."),#"((True) & (-(exists X (A(X)))))."),
-            ("(all X all Y (C(Y) | (A(X) & B(X,Y)))).", "(((all X (A(X))) | (all Y (C(Y)))) & (all Y1 (C(Y1) | (all X1 (B(X1,Y1))))))."),
-            ("(all X all Y (C(Y) & (A(X) | B(X,Y)))).","((all Y (C(Y))) & (all X (A(X) | (all Y1 (B(X,Y1))))))."),
-            # ("all X all T  ((instanceOf(X,fiatLine,T)) -> (exists S exists TP  (((temporalPartOf(TP,T)) & (occupiesSpatialRegion(X,S,TP)) & (instanceOf(S,oneDimensionalSpatialRegion,TP)))))).","((all Y (C(Y))) & (all X (A(X) | (all Y1 (B(X,Y1))))))."),
-            ("all A all B  ((((exists T  (((instanceOf(A,objectAggregate,T)) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) & (all T  ((continuantPartOf(A,B,T)) <-> (continuantPartOf(B,A,T)))))) -> ((A) = (B))).", 
-             "all A all B  ((((exists T  (((instanceOf(A,objectAggregate,T)) & (continuantPartOf(A,B,T)) & (continuantPartOf(B,A,T))))) & (all T  ((continuantPartOf(A,B,T)) <-> (continuantPartOf(B,A,T)))))) -> ((A) = (B)))."),
-            ]
-    
-    # tree_test(tests, lambda inp: ToMiniscopedPCNF().adjust_transform_repeatedly(prover9_parser.parse(inp)), "miniscoping")
-    # tree_test(tests, lambda inp: ToMiniscopedPNNF().adjust_transform_repeatedly(prover9_parser.parse(inp)), "miniscoping")
-    
-    # treeExplainerRED(ToMiniscopedPDNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0])))
-    open("deletePCNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedPCNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
-    open("deletePNNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedPNNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
-    # open("deletePPNNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToPrenex().adjust_transform_repeatedly(ToMiniscopedPNNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0])))))
-    # open("deletePPNNF2.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedPNNF().adjust_transform_repeatedly(ToPrenex().adjust_transform_repeatedly(ToMiniscopedPNNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))))
-    open("deletePDNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedPDNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
-    open("deleteCNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedCNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
-    open("deleteNNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedNNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
-    open("deleteDNF.txt","w", encoding = "utf-8").write(treeExplainerReturning(ToMiniscopedDNF().adjust_transform_repeatedly(prover9_parser.parse(tests[-1][0]))))
-    print("writen some files")
-
-# test_miniscoping()
-# exit()
-
-# ast = prover9_parser.parse("(exists Q exists P cP(P,Q,T) & (i(P,sR,T)|i(Q,sR,T))).")
-# open("deleteMNNF.txt","w",encoding="utf-8").write(treeExplainerReturning(ToMiniscopedNNF().adjust_transform_repeatedly(ast)))
-# open("deleteMCNF.txt","w",encoding="utf-8").write(treeExplainerReturning(ToMiniscopedCNF().adjust_transform_repeatedly(ast)))
-# open("deleteMDNF.txt","w",encoding="utf-8").write(treeExplainerReturning(ToMiniscopedDNF().adjust_transform_repeatedly(ast)))
-# exit()
-
-def test_to_string():
-    tos = ToString()
-    # text = '(all X all Y all Z all T (A(X,Y,T) & (exists T2 (A(Y,Z,T2) & B(T,T2))) -> A(X,Z,T))).'
-    # ast = prover9_parser.parse(text)
-    # treeExplainer(ast)
-    # string = tos.visit(ast)
-    # treeExplainerRED(Tree('universal_quantification', [Token('VARIABLE', 'X'), Tree('universal_quantification_bounded', [Token('VARIABLE', 'Y'), Tree('predicate', [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')]), Tree('disjunction', [Tree('negation', [Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')])]), Tree(Token('RULE', 'predicate'), [Token('PREDICATE_SYMBOL', 'att'), Token('VARIABLE', 'X'), Token('VARIABLE', 'Y')])])])]))
-    string = tos.visit(
-        Tree(
-            "universal_quantification",
-            [
-                Token("VARIABLE", "X"),
-                Tree(
-                    "universal_quantification_bounded",
-                    [
-                        Token("VARIABLE", "Y"),
-                        Tree(
-                            "predicate",
-                            [Token("PREDICATE_SYMBOL", "lec"), Token("VARIABLE", "Y")],
-                        ),
-                        Tree(
-                            "disjunction",
-                            [
-                                Tree(
-                                    "negation",
-                                    [
-                                        Tree(
-                                            Token("RULE", "predicate"),
-                                            [
-                                                Token("PREDICATE_SYMBOL", "lec"),
-                                                Token("VARIABLE", "Y"),
-                                            ],
-                                        )
-                                    ],
-                                ),
-                                Tree(
-                                    Token("RULE", "predicate"),
-                                    [
-                                        Token("PREDICATE_SYMBOL", "att"),
-                                        Token("VARIABLE", "X"),
-                                        Token("VARIABLE", "Y"),
-                                    ],
-                                ),
-                            ],
-                        ),
-                    ],
-                ),
-            ],
-        )
-    )
-    # string = tos.visit(Tree("predicate", [Token('PREDICATE_SYMBOL', 'lec'), Token('VARIABLE', 'Y')]))
-    print(string)
-
-
 class RemoveLines(Transformer):
     """removes start, lines, and line nodes; and also labels. Works only if the tree starts with one start, then one lines, then one single line"""
 
@@ -2009,13 +1494,6 @@ class RemoveLabels(Transformer):
     """removes labels."""
     def label(self, children):
         return Discard
-    
-def test_remove_labels():
-    text = "all A (B(A)) # label(\"proper-continuant-part-of-transitive-at-a-time\") ."
-    ast = prover9_parser.parse(text)
-    tast = RemoveLabels().transform(ast)
-    treeExplainerGREEN(ast)
-    treeExplainerRED(tast)
 
 def get_existential_closure(tree: Tree, exceptions={}) -> Tree:
     free_vars: set[str] = (

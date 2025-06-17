@@ -1,5 +1,5 @@
-from lark import Lark, Tree, Token, Transformer
-from lark.visitors import Visitor, Interpreter
+from lark import Lark, Tree, Token
+from lark.visitors import Visitor
 
 prover9_parser = Lark(r"""
 
@@ -72,26 +72,8 @@ LABEL_TEXT: /"?[a-zA-Z0-9_\-\>\<\\.\+]+"?/
 
 """)
 
-text = '(all X (cat(X) <-> (ed(X) & (exists T1 (pre(X,T1))) & all T (pre(X,T) -> tat(X,T)))))'
-text = '(A(c) & B(y))'
-text = '(P(c1,c2) & Q(x) & T(v)) .'
-text = '''(P(c1,c2) & Q(x) & T(v)) .
-            Q(c)    . '''
-text = '''(P(c1,c2) & Q(x) & T(v)) .
-            True    . 
-            (P(c, c4) & True)    . 
-            False    . '''
-text = 'all X A(X,Y) .'
-text = 'all X A(X,Y,c2) .'
-text = 'all X A(X,Y,c2) & P(X,Z,c) .'
-text = 'all X A(X,Y) & exists Z P(Z) .'
-text = 'all X all Y exists V A(X,Y,c2) & exists Z P(X,Z,c) | V(V,C,T,l).'
-text = 'all X A(X,Y,c2) | - exists Z P(X,Z,c) .'
-
-
-
-
 class Signature:
+    """Class representing a first-order (functon-less) vocabulary. It contains predicates and constants as attributes."""
     def __init__(self):
         self.predicates = {}
         self.constants = []
@@ -115,7 +97,8 @@ class Signature:
             self.constants.append(constant_symbol)
 
 class Model:
-    """Only true facts are recorded"""
+    """Class to represent a first-order model. Only true facts are recorde. False facts are not recorded. Non-stated facts are assumed to be false. 
+    The model contains a signature and two truth tables. The tables content is the same, but the 'ordered' is a dict whose keys are the predicates, while the table simpliciter is a dict whose keys are the positive atoms"""
     def __init__(self):
         self.truth_table = {}
         self.ordered_truth_table = {}
