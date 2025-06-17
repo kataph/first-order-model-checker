@@ -11,7 +11,7 @@ As of now three evaluation strategies have been implemented:
 - an equivalence-based strategy, that reduces the size of the quantification domain for each quantifier: given the signature of the quantified formula, all the constants that cannot be distinguished by the symbols in the signature are collapsed together. 
 - a further reduction of the quantification domains based on the a-priori determination of simple range expressions that the quantified variables must satisfy. Derived on some old works about first-order queries on databases of the 80s-90s (Mainly [this one](https://link.springer.com/chapter/10.1007/3-540-51251-9_8) of François Bry). 
 
-Simply run check.py supplying the path to a file containing a model and the path to a file containing a theory (e.g. `python3 check.py -m DOLCE_p9/DOLCE-clay-statue-model.p9 -a DOLCE_p9/DOLCE-clay-statue-axioms.p9` or `python check.py [...]`). 
+Simply run check.py supplying the path to a file containing a model and the path to a file containing a theory ((The `DOLCE-clay-statue` model and axioms files are an example of model and theory files: e.g. `python3 check.py -m DOLCE_p9/DOLCE-clay-statue-model.p9 -a DOLCE_p9/DOLCE-clay-statue-axioms.p9` or `python check.py [...]`). 
 Default evaluation strategy is brute force. Supply a value to `--options` (can only be `equivalence` or `range`) to change the evauation strategy. 
 
 Some tests are present in `tests.py`. They can be run by executing that file. 
@@ -32,7 +32,7 @@ The input arguments are:
 - `-m`, `--model_file`, type: str, Model file location
 - `-a`, `--axioms_file`, type: str, Axioms file location
 - `-o`, `--options`, type: str, nargs = "+", default: [], Options. Currently only 'equivalence' and 'range' are supported
-- `-t`, `--timeout`, type: int, default = 10, Timeout of the chosen strategy, in seconds. After the timeout the auxillary strategy will be called
+- `-t`, `--timeout`, type: int, default = 10, Timeout of the chosen strategy, in seconds. After the timeout the auxillary strategy (which is the equivalence strategy) will be called
 - `-taux`, `--timeout_aux`, type: int, default: 120, Timeout of the auxillary strategy, in seconds.
 - `-nout`, `--no_timeout`, type: bool, default: False, Deactivates the timeout system.
 - `-bof`, `--break_on_false`, type: bool, default: True, If true, which is the default value, the program will stop at the first axiom evaluated as False.
