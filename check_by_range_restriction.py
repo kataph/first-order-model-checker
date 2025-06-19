@@ -200,6 +200,9 @@ def delete_cond_from_conjunction(self, children, param = "conjunction") -> Tree:
     left, right = children
     if left.data == right.data == "cond":
         return Tree('cond', [])
+    # This latter condition is actually the only one needed, but I leave it like this for emphasis.
+    if left.data == "cond" or right.data == "cond":
+        return Tree('cond', [])
     return Tree(param, children)
 
 
